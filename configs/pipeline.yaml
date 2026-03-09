@@ -15,7 +15,8 @@ preprocessing:
   frame_sampling:
     strategy: "uniform"            # uniform / keyframe / adaptive
     target_fps: 2                  # 采样后目标帧率
-    max_frames_per_window: 4       # 每个推理窗口最大帧数
+    max_frames_per_window: 2       # 每个推理窗口最大帧数（2 帧足够情绪分析）
+  inference_resolution: [480, 270] # 推理前将帧缩放到此分辨率（降低视觉 token 数量）
   roi:
     enabled: true                  # 多人场景启用 ROI 裁剪
     detection_backend: "vision"    # macOS Vision 框架人脸/人体检测

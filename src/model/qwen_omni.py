@@ -30,13 +30,17 @@ class QwenOmniModel:
         model_path: str,
         torch_dtype: str = "bfloat16",
         attn_implementation: str = "sdpa",
-        max_new_tokens: int = 512,
+        max_new_tokens: int = 128,
+        min_pixels: int = 128 * 28 * 28,
+        max_pixels: int = 256 * 28 * 28,
     ) -> None:
         """初始化模型配置，不执行实际加载。"""
         self.model_path: str = model_path
         self.torch_dtype: str = torch_dtype
         self.attn_implementation: str = attn_implementation
         self.max_new_tokens: int = max_new_tokens
+        self.min_pixels: int = min_pixels
+        self.max_pixels: int = max_pixels
         self._model: Any = None
         self._processor: Any = None
 
@@ -61,7 +65,16 @@ class QwenOmniModel:
             attn_implementation=self.attn_implementation,
         )
         _LOGGER.info("模型权重加载完成，正在加载 Processor ...")
-        self._processor = Qwen2_5OmniProcessor.from_pretrained(self.model_path)
+        _LOGGER.info(
+            "Processor 像素限制: min_pixels=%d, max_pixels=%d",
+            self.min_pixels,
+            self.max_pixels,
+        )
+        self._processor = Qwen2_5OmniProcessor.from_pretrained(
+            self.model_path,
+            min_pixels=self.min_pixels,
+            max_pixels=self.max_pixels,
+        )
         _LOGGER.info("QwenOmniModel 加载完成 (device=%s)", self.device)
 
     def infer(self, conversation: list[dict], use_audio_in_video: bool = True) -> str:
@@ -91,6 +104,8 @@ class QwenOmniModel:
                 **inputs,
                 use_audio_in_video=use_audio_in_video,
                 max_new_tokens=self.max_new_tokens,
+                do_sample=False,
+                use_cache=True,
             )
         elapsed_seconds: float = perf_counter() - start_time
         if elapsed_seconds > _DEFAULT_TIMEOUT_WARNING_SECONDS:

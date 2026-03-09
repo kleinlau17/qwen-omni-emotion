@@ -90,7 +90,9 @@ class RealtimePipeline:
             model_path=str(Path(model_path).expanduser()),
             torch_dtype=str(infer_cfg.get("torch_dtype", "bfloat16")),
             attn_implementation=str(infer_cfg.get("attn_implementation", "sdpa")),
-            max_new_tokens=int(infer_cfg.get("max_new_tokens", 512)),
+            max_new_tokens=int(infer_cfg.get("max_new_tokens", 128)),
+            min_pixels=int(infer_cfg.get("min_pixels", 128 * 28 * 28)),
+            max_pixels=int(infer_cfg.get("max_pixels", 256 * 28 * 28)),
         )
         LOGGER.info("  [6/6] 初始化状态追踪器 (EmotionStateTracker) ...")
         self.tracker = EmotionStateTracker(
@@ -99,6 +101,13 @@ class RealtimePipeline:
 
         self._use_audio_in_video: bool = bool(infer_cfg.get("use_audio_in_video", True))
         self._roi_enabled: bool = bool(roi_cfg.get("enabled", True))
+
+        infer_res_raw = preprocess_cfg.get("inference_resolution", [480, 270])
+        self._inference_resolution: tuple[int, int] = (
+            int(infer_res_raw[0]),
+            int(infer_res_raw[1]),
+        )
+
         self._inference_interval: float = float(perf_cfg.get("inference_interval_seconds", 0.1))
         self._latency_budget_single: float = float(
             perf_cfg.get("latency_budget_ms", {}).get("single_person", 400)
@@ -199,11 +208,18 @@ class RealtimePipeline:
 
                 has_audio = audio_input is not None
                 person_frames = self._prepare_person_inputs(sampled_frames)
+                target_w, target_h = self._inference_resolution
                 for person_index, frames in enumerate(person_frames):
+                    resized = [
+                        Image.fromarray(f).resize(
+                            (target_w, target_h), Image.LANCZOS,
+                        )
+                        for f in frames
+                    ]
                     conversation = build_conversation(
                         system_prompt=build_system_prompt(),
                         task_prompt=build_single_person_prompt(),
-                        frames=[Image.fromarray(frame) for frame in frames],
+                        frames=resized,
                         audio=audio_input,
                     )
                     response = self.model.infer(
