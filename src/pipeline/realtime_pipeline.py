@@ -1,7 +1,19 @@
-"""端到端实时流水线 — 串联采集→预处理→推理→理解，控制延迟 <400ms"""
+"""端到端实时流水线 — 双线程流水线：预处理 ∥ 推理，完成即显示
+
+架构::
+
+    StreamBuffer → [PrepThread] → PrepQueue(FIFO) → [InferThread] → Dashboard
+                     ~0.5s/窗口                        ~4.5s/推理     即时更新
+
+- PrepThread 持续从 StreamBuffer 拉取窗口并预处理（帧采样/ROI/resize/构建 conversation），
+  结果推入线程安全的 FIFO 队列。
+- InferThread 从队列取出 1~batch_size 个 prepared item 执行推理，每完成一批立即更新状态。
+- FIFO 保证时间轴顺序；预处理与推理并行消除了预处理等待。
+"""
 from __future__ import annotations
 
 import logging
+import queue
 import time
 from collections import deque
 from pathlib import Path
@@ -70,9 +82,15 @@ class RealtimePipeline:
             sample_rate=int(audio_cfg.get("sample_rate", 16000)),
             channels=int(audio_cfg.get("channels", 1)),
         )
+        self._batch_size: int = int(perf_cfg.get("batch_size", 1))
+
+        buffer_max = max(
+            int(stream_cfg.get("max_windows_in_buffer", 3)),
+            self._batch_size + 2,
+        )
         self.stream_buffer = StreamBuffer(
             window_duration=float(stream_cfg.get("window_duration_seconds", 1.5)),
-            max_windows=int(stream_cfg.get("max_windows_in_buffer", 3)),
+            max_windows=buffer_max,
         )
         LOGGER.info("  [4/6] 初始化预处理 (FrameSampler + ROIExtractor) ...")
         self.frame_sampler = FrameSampler(
@@ -119,7 +137,12 @@ class RealtimePipeline:
         self._running = False
         self._state_lock = Lock()
         self._latest_states: dict[str, EmotionResult] = {}
-        self._loop_thread: Thread | None = None
+
+        self._prep_queue: queue.Queue[dict[str, Any]] = queue.Queue(
+            maxsize=self._batch_size * 3,
+        )
+        self._prep_thread: Thread | None = None
+        self._infer_thread: Thread | None = None
 
         self._frame_lock = Lock()
         self._latest_frame: np.ndarray | None = None
@@ -131,7 +154,7 @@ class RealtimePipeline:
         self._inference_count: int = 0
 
     def start(self) -> None:
-        """加载模型并启动采集与推理循环。"""
+        """加载模型并启动采集与双线程流水线。"""
         with self._state_lock:
             if self._running:
                 return
@@ -156,26 +179,36 @@ class RealtimePipeline:
         except Exception:
             LOGGER.exception("启动音频采集失败，进入降级模式（仅视频）")
 
-        self._loop_thread = Thread(
-            target=self._inference_loop,
-            name="realtime-inference",
+        self._prep_thread = Thread(
+            target=self._prep_loop,
+            name="realtime-prep",
             daemon=True,
         )
-        self._loop_thread.start()
-        LOGGER.info("推理循环已启动")
+        self._infer_thread = Thread(
+            target=self._infer_loop,
+            name="realtime-infer",
+            daemon=True,
+        )
+        self._prep_thread.start()
+        self._infer_thread.start()
+        LOGGER.info(
+            "流水线已启动 (prep→queue→infer, batch_size=%d)",
+            self._batch_size,
+        )
         LOGGER.info("RealtimePipeline 已就绪")
 
     def stop(self) -> None:
-        """停止推理循环并释放采集资源。"""
+        """停止流水线并释放采集资源。"""
         with self._state_lock:
             if not self._running:
                 return
             self._running = False
 
-        loop_thread = self._loop_thread
-        if loop_thread is not None:
-            loop_thread.join(timeout=max(1.0, self._inference_interval * 2))
-            self._loop_thread = None
+        for thread in (self._prep_thread, self._infer_thread):
+            if thread is not None:
+                thread.join(timeout=10.0)
+        self._prep_thread = None
+        self._infer_thread = None
 
         try:
             self.video_capture.stop()
@@ -189,15 +222,25 @@ class RealtimePipeline:
 
         LOGGER.info("RealtimePipeline 已停止")
 
-    def _inference_loop(self) -> None:
-        """持续从缓冲区拉取窗口并执行推理。"""
+    # ── 流水线阶段 1: 预处理线程 ──────────────────────────────────
+
+    def _prep_loop(self) -> None:
+        """持续从 StreamBuffer 拉取窗口，预处理后推入 _prep_queue。
+
+        处理速度远快于推理 (~0.5s vs ~4.5s)，因此队列中通常有
+        若干已就绪的 item 等待 InferThread 消费。
+        """
+        system_prompt = build_system_prompt()
+        task_prompt = build_single_person_prompt()
+        target_w, target_h = self._inference_resolution
+        window_serial: int = 0
+
         while self._is_running():
             window = self.stream_buffer.get_window()
             if window is None:
                 time.sleep(self._inference_interval)
                 continue
 
-            loop_start = perf_counter()
             try:
                 sampled_frames = self.frame_sampler.sample(window.frames)
                 if not sampled_frames:
@@ -205,11 +248,9 @@ class RealtimePipeline:
 
                 audio = window.get_audio_array()
                 audio_input = audio if audio.size > 0 else None
-
-                has_audio = audio_input is not None
                 person_frames = self._prepare_person_inputs(sampled_frames)
-                target_w, target_h = self._inference_resolution
-                for person_index, frames in enumerate(person_frames):
+
+                for person_idx, frames in enumerate(person_frames):
                     resized = [
                         Image.fromarray(f).resize(
                             (target_w, target_h), Image.LANCZOS,
@@ -217,57 +258,110 @@ class RealtimePipeline:
                         for f in frames
                     ]
                     conversation = build_conversation(
-                        system_prompt=build_system_prompt(),
-                        task_prompt=build_single_person_prompt(),
+                        system_prompt=system_prompt,
+                        task_prompt=task_prompt,
                         frames=resized,
                         audio=audio_input,
                     )
-                    response = self.model.infer(
-                        conversation=conversation,
-                        use_audio_in_video=self._use_audio_in_video and has_audio,
-                    )
+                    item: dict[str, Any] = {
+                        "conversation": conversation,
+                        "window_serial": window_serial,
+                        "person_idx": person_idx,
+                        "end_ts": window.end_ts,
+                        "audio": audio_input,
+                        "prep_done_ts": perf_counter(),
+                    }
+                    while self._is_running():
+                        try:
+                            self._prep_queue.put(item, timeout=1.0)
+                            break
+                        except queue.Full:
+                            continue
+
+                window_serial += 1
+            except Exception:
+                LOGGER.exception("预处理异常，跳过窗口 #%d", window_serial)
+
+    # ── 流水线阶段 2: 推理线程 ────────────────────────────────────
+
+    def _infer_loop(self) -> None:
+        """从 _prep_queue 取出 prepared item 执行推理，完成即更新状态。
+
+        每轮从队列中取 1~batch_size 个 item，调用 batch_infer，
+        结果逐条更新 tracker 和仪表盘状态。FIFO 取出保证时间轴顺序。
+        """
+        while self._is_running():
+            batch_items: list[dict[str, Any]] = []
+
+            try:
+                first = self._prep_queue.get(timeout=1.0)
+                batch_items.append(first)
+            except queue.Empty:
+                continue
+
+            for _ in range(self._batch_size - 1):
+                try:
+                    batch_items.append(self._prep_queue.get_nowait())
+                except queue.Empty:
+                    break
+
+            infer_start = perf_counter()
+            try:
+                has_audio = any(item["audio"] is not None for item in batch_items)
+                conversations = [item["conversation"] for item in batch_items]
+
+                responses = self.model.batch_infer(
+                    conversations=conversations,
+                    use_audio_in_video=self._use_audio_in_video and has_audio,
+                )
+
+                for item, response in zip(batch_items, responses):
                     result = parse_emotion_response(response)
                     if result is None:
-                        LOGGER.warning("模型输出无法解析，已跳过当前人物结果")
+                        LOGGER.warning(
+                            "模型输出无法解析，已跳过 (window=#%d person=%d)",
+                            item["window_serial"], item["person_idx"],
+                        )
                         continue
                     normalized = EmotionResult(
-                        person_id=f"person_{person_index}",
+                        person_id=f"person_{item['person_idx']}",
                         primary_emotion=result.primary_emotion,
                         emotion_intensity=result.emotion_intensity,
                         secondary_emotion=result.secondary_emotion,
                         confidence=result.confidence,
                         description=result.description,
                     )
-                    self.tracker.update(normalized, timestamp=window.end_ts)
+                    self.tracker.update(normalized, timestamp=item["end_ts"])
                     with self._state_lock:
                         self._latest_states[normalized.person_id] = normalized
 
-                elapsed_ms = (perf_counter() - loop_start) * 1000.0
-                person_count = len(person_frames)
-                budget_ms = (
-                    self._latency_budget_multi if person_count > 1 else self._latency_budget_single
-                )
+                infer_ms = (perf_counter() - infer_start) * 1000.0
+                total_items = len(batch_items)
+                e2e_ms = (perf_counter() - batch_items[0]["prep_done_ts"]) * 1000.0
+                budget_ms = self._latency_budget_single
 
                 with self._metrics_lock:
-                    self._person_count = person_count
+                    self._person_count = total_items
                     self._inference_count += 1
                     self._metrics_history.append({
-                        "latency_ms": elapsed_ms,
-                        "person_count": person_count,
+                        "latency_ms": infer_ms,
+                        "person_count": total_items,
                         "budget_ms": budget_ms,
-                        "within_budget": elapsed_ms <= budget_ms,
+                        "within_budget": infer_ms <= budget_ms,
                         "timestamp": time.time(),
+                        "batch_items": total_items,
+                        "e2e_ms": e2e_ms,
                     })
 
                 LOGGER.info(
-                    "窗口推理完成: people=%d latency=%.1fms budget=%.1fms status=%s",
-                    person_count,
-                    elapsed_ms,
-                    budget_ms,
-                    "ok" if elapsed_ms <= budget_ms else "exceeded",
+                    "推理完成: batch=%d infer=%.0fms e2e=%.0fms per_item=%.0fms",
+                    total_items,
+                    infer_ms,
+                    e2e_ms,
+                    infer_ms / max(total_items, 1),
                 )
             except Exception:
-                LOGGER.exception("推理循环异常，跳过当前窗口")
+                LOGGER.exception("推理异常，跳过当前批次")
 
     def get_current_state(self) -> dict[str, dict[str, Any]]:
         """返回当前已知人物情绪状态快照。"""

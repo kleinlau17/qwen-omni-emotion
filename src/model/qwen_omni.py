@@ -79,14 +79,39 @@ class QwenOmniModel:
 
     def infer(self, conversation: list[dict], use_audio_in_video: bool = True) -> str:
         """执行一次多模态推理并返回文本结果。"""
+        results = self.batch_infer(
+            conversations=[conversation],
+            use_audio_in_video=use_audio_in_video,
+        )
+        return results[0] if results else ""
+
+    def batch_infer(
+        self,
+        conversations: list[list[dict]],
+        use_audio_in_video: bool = True,
+    ) -> list[str]:
+        """批量执行多模态推理，一次 forward pass 处理多个 conversation。
+
+        Args:
+            conversations: N 个 conversation，每个是 ``[system_msg, user_msg]`` 格式。
+            use_audio_in_video: 是否将视频中的音频送入模型。
+
+        Returns:
+            长度为 N 的文本结果列表，与输入顺序对应。
+        """
         if not self.is_loaded():
-            raise RuntimeError("Model is not loaded. Please call load() before infer().")
+            raise RuntimeError("Model is not loaded. Please call load() before batch_infer().")
+        if not conversations:
+            return []
 
         assert self._model is not None
         assert self._processor is not None
 
+        batch_size = len(conversations)
+        chat_input = conversations[0] if batch_size == 1 else conversations
+
         inputs: Any = self._processor.apply_chat_template(
-            conversation,
+            chat_input,
             load_audio_from_video=False,
             add_generation_prompt=True,
             tokenize=True,
@@ -108,9 +133,11 @@ class QwenOmniModel:
                 use_cache=True,
             )
         elapsed_seconds: float = perf_counter() - start_time
+
         if elapsed_seconds > _DEFAULT_TIMEOUT_WARNING_SECONDS:
             _LOGGER.warning(
-                "推理耗时超阈值：elapsed=%.3fs threshold=%.3fs",
+                "推理耗时超阈值：batch=%d elapsed=%.3fs threshold=%.3fs",
+                batch_size,
                 elapsed_seconds,
                 _DEFAULT_TIMEOUT_WARNING_SECONDS,
             )
@@ -121,7 +148,7 @@ class QwenOmniModel:
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
         )
-        return decoded[0] if decoded else ""
+        return decoded
 
     def is_loaded(self) -> bool:
         """返回模型与 Processor 是否已加载。"""

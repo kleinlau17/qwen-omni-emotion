@@ -81,6 +81,24 @@ class StreamBuffer:
                 return None
             return self._ready_windows.pop(0)
 
+    def get_windows_batch(self, max_count: int) -> list[InferenceWindow]:
+        """非阻塞获取至多 *max_count* 个可推理窗口。
+
+        Args:
+            max_count: 本次最多取出的窗口数量。
+
+        Returns:
+            可用窗口列表（可能为空，最多 *max_count* 个）。
+        """
+        with self._lock:
+            self._rollover_if_needed_locked()
+            n = min(max_count, len(self._ready_windows))
+            if n == 0:
+                return []
+            batch = self._ready_windows[:n]
+            self._ready_windows = self._ready_windows[n:]
+            return batch
+
     def reset(self) -> None:
         """清空当前与已完成窗口缓存。"""
         with self._lock:

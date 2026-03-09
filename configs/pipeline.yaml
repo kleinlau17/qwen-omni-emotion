@@ -24,4 +24,4 @@ preprocessing:
 
 stream_buffer:
   window_duration_seconds: 1.5     # 缓冲窗口时长
-  max_windows_in_buffer: 3        # 最大缓冲窗口数（防止内存膨胀）
+  max_windows_in_buffer: 6        # 最大缓冲窗口数（≥ batch_size+2，允许推理期间积累）
