@@ -1,0 +1,34 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+.venv/
+venv/
+env/
+
+.DS_Store
+*.swp
+*.swo
+
+*.log
+
+.idea/
+.vscode/
+
+# Model files
+models/
+*.bin
+*.safetensors
+*.gguf
+*.pt
+
+# Model cache directory accidentally created in project root
+~/
+
+# Cache
+.ruff_cache/
+.pytest_cache/

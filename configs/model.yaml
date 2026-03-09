@@ -1,0 +1,15 @@
+# 模型配置
+
+model:
+  name: "Qwen2.5-Omni-3B"
+  source: "https://modelscope.cn/models/Qwen/Qwen2.5-Omni-3B"
+  local_path: "/Users/tonlyai/Documents/Qwen2.5/Omni3B/~/.cache/modelscope/Qwen/Qwen2.5-Omni-3B"
+  backend: "transformers"          # 使用 transformers + PyTorch
+
+inference:
+  torch_dtype: "bfloat16"         # M3 Ultra 支持 bfloat16
+  device_map: "auto"              # 自动选择设备 (MPS)
+  attn_implementation: "sdpa"     # MPS 兼容的注意力实现 (非 flash_attention_2)
+  use_audio_in_video: true        # 视频中的音频是否送入模型
+  max_new_tokens: 512             # 单次推理最大生成 token 数
+  return_audio: false             # 不需要模型生成语音（仅文本输出）

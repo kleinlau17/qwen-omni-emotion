@@ -1,0 +1,261 @@
+/* Qwen-Omni 情绪理解仪表盘 — 暗色主题 */
+
+:root {
+  --bg-primary: #0f1117;
+  --bg-secondary: #1a1d27;
+  --bg-card: #222639;
+  --border: #2e3348;
+  --text-primary: #e4e6f0;
+  --text-secondary: #8b8fa3;
+  --accent-blue: #4a9eff;
+  --accent-green: #34d399;
+  --accent-yellow: #fbbf24;
+  --accent-red: #f87171;
+  --accent-purple: #a78bfa;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+/* 状态栏 */
+#status-bar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 80px;
+}
+
+.status-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-value {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-ok { color: var(--accent-green); }
+.status-warn { color: var(--accent-yellow); }
+.status-error { color: var(--accent-red); }
+
+/* 主面板 */
+#dashboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px 24px;
+}
+
+section h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+/* 视频面板 */
+#video-panel {
+  min-width: 0;
+}
+
+#video-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#mjpeg-feed {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* 情绪卡片面板 */
+#emotion-panel {
+  min-width: 0;
+}
+
+#emotion-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: calc(9 / 16 * (50vw - 40px));
+  overflow-y: auto;
+}
+
+.empty-hint {
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-align: center;
+  padding: 40px;
+}
+
+.emotion-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  transition: border-color 0.2s;
+}
+
+.emotion-card:hover {
+  border-color: var(--accent-blue);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.person-id {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-blue);
+}
+
+.confidence-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(74, 158, 255, 0.15);
+  color: var(--accent-blue);
+}
+
+.primary-emotion {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.secondary-emotion {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.intensity-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.intensity-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 32px;
+}
+
+.intensity-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.intensity-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+/* 趋势图面板 */
+#trend-panel {
+  padding: 0 24px 24px;
+}
+
+#chart-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  height: 240px;
+}
+
+#trend-chart {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* 情绪颜色映射 */
+.emotion-happy { color: var(--accent-yellow); }
+.emotion-sad { color: var(--accent-blue); }
+.emotion-angry { color: var(--accent-red); }
+.emotion-fearful { color: var(--accent-purple); }
+.emotion-surprised { color: #f472b6; }
+.emotion-disgusted { color: #a3e635; }
+.emotion-neutral { color: var(--text-secondary); }
+.emotion-contemptuous { color: #fb923c; }
+
+.bar-happy { background: var(--accent-yellow); }
+.bar-sad { background: var(--accent-blue); }
+.bar-angry { background: var(--accent-red); }
+.bar-fearful { background: var(--accent-purple); }
+.bar-surprised { background: #f472b6; }
+.bar-disgusted { background: #a3e635; }
+.bar-neutral { background: var(--text-secondary); }
+.bar-contemptuous { background: #fb923c; }
+
+/* 响应式 */
+@media (max-width: 900px) {
+  #dashboard {
+    grid-template-columns: 1fr;
+  }
+  #emotion-cards {
+    max-height: none;
+  }
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}

@@ -1,0 +1,21 @@
+# 全局默认配置
+
+system:
+  log_level: "INFO"
+  local_only: true                 # 所有处理在本地完成，不上传原始数据
+
+performance:
+  latency_budget_ms:
+    single_person: 400             # 单人端到端延迟上限
+    multi_person: 500              # 多人(4-6人)延迟上限
+  inference_window_seconds: 1.5    # 推理窗口时长
+  inference_interval_seconds: 1.0  # 推理触发间隔（窗口可重叠）
+  buffer_pool_size: 8              # 帧缓冲池大小
+
+visualization:
+  enabled: true                    # 是否启用 Web 可视化仪表盘
+  host: "127.0.0.1"               # 绑定地址（仅本地访问，隐私保护）
+  port: 8080                       # Web 服务端口
+  mjpeg_quality: 70                # MJPEG 视频流 JPEG 压缩质量 (1-100)
+  mjpeg_fps: 15                    # MJPEG 推流帧率上限
+  ws_push_interval_ms: 300         # WebSocket 数据推送间隔 (毫秒)

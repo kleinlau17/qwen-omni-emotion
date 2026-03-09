@@ -1,0 +1,26 @@
+# 管道流程配置
+
+capture:
+  video:
+    resolution: [1920, 1080]       # 1080p
+    fps: 30
+    color_format: "RGB"
+    backend: "avfoundation"
+  audio:
+    sample_rate: 16000             # 16kHz
+    channels: 1                    # 单声道
+    chunk_duration_ms: 100         # 每个音频块时长
+
+preprocessing:
+  frame_sampling:
+    strategy: "uniform"            # uniform / keyframe / adaptive
+    target_fps: 2                  # 采样后目标帧率
+    max_frames_per_window: 4       # 每个推理窗口最大帧数
+  roi:
+    enabled: true                  # 多人场景启用 ROI 裁剪
+    detection_backend: "vision"    # macOS Vision 框架人脸/人体检测
+    padding_ratio: 0.2             # ROI 边界扩展比例
+
+stream_buffer:
+  window_duration_seconds: 1.5     # 缓冲窗口时长
+  max_windows_in_buffer: 3        # 最大缓冲窗口数（防止内存膨胀）

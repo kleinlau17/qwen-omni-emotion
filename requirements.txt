@@ -1,0 +1,35 @@
+# Qwen2.5-Omni 实时情绪理解系统依赖
+
+# 推理框架 (Qwen2.5-Omni 专用 transformers 版本)
+torch>=2.4.0
+transformers>=4.51.0
+accelerate>=1.2.0
+
+# Qwen2.5-Omni 官方工具 (多模态输入预处理)
+qwen-omni-utils>=0.0.4
+
+# 音频 I/O
+soundfile>=0.12.1
+
+# 数值计算
+numpy>=1.26.0
+
+# 配置管理
+pyyaml>=6.0.1
+
+# macOS 系统桥接 (摄像头/麦克风采集)
+pyobjc-core>=10.0
+pyobjc-framework-AVFoundation>=10.0
+pyobjc-framework-CoreMedia>=10.0
+pyobjc-framework-Vision>=10.0
+
+# 模型下载
+modelscope>=1.20.0
+
+# Web 可视化仪表盘
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+Pillow>=10.0.0
+
+# 测试
+pytest>=8.0.0

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qwen-Omni 情绪理解仪表盘</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- 顶部状态栏 -->
+  <header id="status-bar">
+    <div class="status-item">
+      <span class="status-label">系统状态</span>
+      <span id="sys-status" class="status-value status-ok">运行中</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">推理延迟</span>
+      <span id="sys-latency" class="status-value">-- ms</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">平均延迟</span>
+      <span id="sys-avg-latency" class="status-value">-- ms</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">检测人数</span>
+      <span id="sys-person-count" class="status-value">0</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">推理次数</span>
+      <span id="sys-inference-count" class="status-value">0</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">连接</span>
+      <span id="ws-status" class="status-value status-warn">断开</span>
+    </div>
+  </header>
+
+  <!-- 主内容区 -->
+  <main id="dashboard">
+    <!-- 左侧：实时画面 -->
+    <section id="video-panel">
+      <h2>实时画面</h2>
+      <div id="video-container">
+        <img id="mjpeg-feed" src="/api/stream" alt="实时画面加载中...">
+      </div>
+    </section>
+
+    <!-- 右侧：情绪卡片 -->
+    <section id="emotion-panel">
+      <h2>情绪分析</h2>
+      <div id="emotion-cards">
+        <div class="empty-hint">等待推理结果...</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 底部：趋势图 -->
+  <section id="trend-panel">
+    <h2>情绪趋势</h2>
+    <div id="chart-container">
+      <canvas id="trend-chart"></canvas>
+    </div>
+  </section>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

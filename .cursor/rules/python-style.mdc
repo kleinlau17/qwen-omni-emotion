@@ -1,0 +1,40 @@
+---
+description: Python 代码风格规则
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python 代码风格
+
+## 导入顺序
+
+1. 标准库
+2. 第三方库 (torch, transformers, numpy)
+3. 项目内部模块 (src.*)
+
+各组之间空一行。
+
+## 类型注解
+
+- 函数参数和返回值必须标注类型
+- 使用 `from __future__ import annotations` 支持延迟求值
+- 复杂类型使用 `TypeAlias` 或 `TypeVar`
+
+## 异步与并发
+
+- 音视频采集层使用 `asyncio` 或回调机制
+- 模型推理在主线程执行（MPS 设备要求）
+- 采集与推理通过 stream_buffer 解耦，避免采集阻塞推理
+
+## 错误处理
+
+- 采集层异常不应导致管道崩溃，需 graceful degradation
+- 模型推理超时需有 fallback（如跳过当前窗口）
+- JSON 解析失败需记录原始输出并返回默认值
+
+## 性能关注点
+
+- 避免在热路径上分配大对象，复用 buffer
+- numpy 数组操作优先于 Python 循环
+- 推理调用尽量批处理，减少 CPU-GPU 同步
+- torch 推理使用 `torch.no_grad()` 上下文

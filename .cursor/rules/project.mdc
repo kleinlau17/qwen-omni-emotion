@@ -1,0 +1,56 @@
+---
+description: 项目全局规则 - Qwen2.5-Omni 实时情绪理解系统
+globs: 
+alwaysApply: true
+---
+
+# 项目概述
+
+本项目基于 Qwen2.5-Omni-3B 多模态模型，在 M3 Ultra Mac Studio 上构建实时情绪理解系统。
+模型接收视频帧 + 音频 + 文本 prompt，端到端输出情绪/氛围分析的文本结果。
+
+核心链路：采集 → 输入准备 → prompt 构建 → 模型推理 → 输出解析 → 状态追踪
+
+## 技术栈
+
+- **运行环境**: macOS / Apple Silicon (M3 Ultra, 192GB 统一内存)
+- **语言**: Python 3.11+
+- **推理框架**: transformers + PyTorch (MPS 后端)
+- **模型**: Qwen2.5-Omni-3B (ModelScope / HuggingFace)
+- **模型工具**: qwen-omni-utils (官方多模态输入处理)
+- **视频采集**: AVFoundation (通过 PyObjC)
+- **人体检测**: macOS Vision 框架 (ROI 裁剪用)
+
+## 关键认知
+
+- Qwen2.5-Omni-3B 是端到端多模态模型，特征提取/跨模态融合/语义理解全部由模型内部完成
+- 我们的代码不做任何手动特征工程（不提取微表情、不分析肢体、不处理声纹）
+- 系统的核心智能在于 prompt 设计 — 怎么问决定了模型怎么答
+- 格式转换（分辨率/色彩空间/音频采样率）由模型自带的 Processor 完成
+
+## 编码规范
+
+- 使用中文注释说明业务逻辑，英文命名变量和函数
+- 类型注解 (Type Hints) 必须完整
+- 所有公开 API 需要 docstring
+- 遵循 PEP 8 规范
+- 使用 `logging` 模块记录日志，禁止 `print` 调试
+
+## 架构约束
+
+- 所有数据处理在本地完成，禁止上传原始音视频（隐私保护 = 不写网络请求代码）
+- 端到端延迟目标 <400ms（单人），<500ms（多人 4-6 人）
+- 模型在 MPS 设备上运行，统一内存由硬件自动管理
+
+## 目录结构
+
+```
+src/
+├── capture/          # 采集层 (摄像头/麦克风 + 时间窗口缓冲)
+├── preprocessing/    # 输入准备 (帧采样 + 多人ROI裁剪)
+├── model/            # 模型层 (transformers 加载 + 推理)
+├── prompts/          # 提示词工程 (系统人设 + 任务指令 + 输出格式)
+├── understanding/    # 后处理层 (响应解析 + 状态追踪)
+├── pipeline/         # 管道编排 (推理窗口调度)
+└── utils/            # 工具 (日志)
+```

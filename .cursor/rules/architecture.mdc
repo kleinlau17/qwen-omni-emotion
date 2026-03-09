@@ -1,0 +1,93 @@
+---
+description: 系统架构规则 - 数据流与模块边界
+globs: "src/**/*.py"
+alwaysApply: false
+---
+
+# 架构规则
+
+## 数据流（严格单向）
+
+```
+capture → preprocessing → prompts + model → understanding
+                          ↑                       ↓
+                       pipeline (推理窗口调度与编排)
+                          ↓
+                    visualization (只读观察，不参与核心数据流)
+```
+
+- 下游模块不得反向依赖上游的内部实现
+- 模块间通过 `pipeline/` 编排，不直接互相调用
+- `prompts/` 和 `model/` 协同工作：prompts 构建 conversation，model 执行推理
+- `visualization/` 仅通过 `pipeline/` 的公开只读接口获取数据，与其他模块零耦合
+
+## 模块职责边界
+
+### capture/ — 原始信号获取 + 缓冲
+- 输入：硬件设备 (摄像头/麦克风)
+- 输出：按时间窗口组织的视频帧序列 + 音频段
+- `video_capture.py`: AVFoundation 摄像头采集
+- `audio_capture.py`: 麦克风音频采集
+- `stream_buffer.py`: 将连续流按推理窗口切片，供 pipeline 周期性取用
+
+### preprocessing/ — 输入准备（不做特征工程）
+- 输入：一个时间窗口内的原始帧 + 音频
+- 输出：采样后的帧列表 + 音频段（仍是原始数据，非特征）
+- `frame_sampler.py`: 从 30fps 中选帧（均匀/关键帧/自适应策略）
+- `roi_extractor.py`: 多人场景下用 Vision 框架检测人体，裁出各人物区域
+- 禁止做特征提取或语义分析，格式转换由模型 Processor 完成
+
+### prompts/ — 提示词工程（系统核心智能）
+- 输入：场景类型（单人/多人）、上下文状态
+- 输出：完整的 conversation 消息列表（含 system/user role）
+- `system_prompt.py`: 模型的角色设定与行为约束
+- `task_prompts.py`: 不同分析任务的指令模板
+- `output_schema.py`: 约束模型输出为可解析的 JSON 格式
+
+### model/ — 模型推理
+- 输入：conversation 消息列表 + 视频帧 + 音频
+- 输出：模型生成的文本（情绪/氛围分析结果）
+- `qwen_omni.py`: 封装模型加载、Processor 调用、generate() 推理
+- 格式转换（分辨率/色彩/音频采样率）由 Qwen2_5OmniProcessor 内部完成
+- 使用 transformers + PyTorch MPS 后端
+
+### understanding/ — 后处理
+- 输入：模型的文本输出
+- 输出：结构化数据 (dataclass) + 带时序信息的状态
+- `response_parser.py`: 将模型 JSON 文本输出解析为 Python 数据结构
+- `state_tracker.py`: 跨推理窗口累积情绪变化趋势，检测突变
+
+### pipeline/ — 编排层
+- 串联以上所有层，管理推理窗口的生命周期
+- 控制推理频率（如每 1-2 秒一个窗口）
+- 监控延迟，确保 <400ms / <500ms 的预算
+- 是唯一允许跨层导入的模块
+- 暴露只读接口供 visualization 消费：`get_latest_frame()`、`get_performance_metrics()`、`get_emotion_trends()`
+
+### visualization/ — 可视化层（只读观察者）
+- 定位：pipeline 状态的只读消费者，不参与也不影响核心推理数据流
+- `web_server.py`: FastAPI 应用，MJPEG 视频流 + WebSocket 实时推送 + 静态仪表盘
+- `static/`: 前端文件（HTML/CSS/JS），暗色主题仪表盘，Chart.js 趋势图
+- 仅依赖 `pipeline/` 的公开接口，禁止导入 capture/model/understanding 等模块
+- 绑定 `127.0.0.1`（遵守 `local_only` 隐私约束），在 `main.py` 中以守护线程启动
+
+## 推理窗口机制
+
+系统以"推理窗口"为单位工作，而非逐帧处理：
+1. capture 层连续采集 30fps 视频 + 16kHz 音频
+2. stream_buffer 按时间窗口（如 1.5s）组织数据
+3. pipeline 周期性从 buffer 取一个窗口
+4. preprocessing 对窗口内帧采样（如选 4 帧）
+5. prompts 构建 conversation（system + 任务指令 + 媒体）
+6. model 执行推理，返回文本
+7. understanding 解析文本，更新状态
+
+## 数据格式约定
+
+- 视频帧: `numpy.ndarray`, shape `(H, W, 3)`, dtype `uint8`, RGB
+- 音频段: `numpy.ndarray`, shape `(samples,)`, dtype `float32`, 16kHz
+- 时间戳: `float`, Unix epoch seconds
+- 推理窗口: `dict` with keys `frames`, `audio`, `start_ts`, `end_ts`
+- 模型输入: transformers conversation 格式 (list[dict])
+- 模型输出: `str` (JSON 格式文本)
+- 解析结果: `dataclass` (定义在 understanding 层)
