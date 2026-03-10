@@ -1,17 +1,31 @@
 # 模型配置
 
 model:
-  name: "Qwen2.5-Omni-3B"
-  source: "https://modelscope.cn/models/Qwen/Qwen2.5-Omni-3B"
-  local_path: "/Users/tonlyai/Documents/Qwen2.5/Omni3B/~/.cache/modelscope/Qwen/Qwen2.5-Omni-3B"
-  backend: "transformers"          # 使用 transformers + PyTorch
+  name: "Qwen3-Omni-30B-A3B-Instruct-4bit"
+  backend: "mlx"                   # 默认优先走 MLX，能力不足时按策略回退
+  repo_id: "mlx-community/Qwen3-Omni-30B-A3B-Instruct-4bit"
+  local_path: "~/.cache/modelscope/mlx-community/Qwen3-Omni-30B-A3B-Instruct-4bit"
+  fallback_backend: "transformers"
+  fallback_repo_id: "Qwen/Qwen2.5-Omni-3B"
+  fallback_local_path: "~/.cache/modelscope/Qwen/Qwen2.5-Omni-3B"
+  source: "https://modelscope.cn/models/mlx-community/Qwen3-Omni-30B-A3B-Instruct-4bit"
 
 inference:
-  torch_dtype: "bfloat16"         # M3 Ultra 支持 bfloat16
-  device_map: "auto"              # 自动选择设备 (MPS)
-  attn_implementation: "sdpa"     # MPS 兼容的注意力实现 (非 flash_attention_2)
   use_audio_in_video: true        # 视频中的音频是否送入模型
   max_new_tokens: 128             # 单次推理最大生成 token 数（JSON 输出仅需 ~100 token）
-  return_audio: false             # 不需要模型生成语音（仅文本输出）
   min_pixels: 100352              # 128 * 28 * 28 — Processor 视觉 token 下限
   max_pixels: 200704              # 256 * 28 * 28 — Processor 视觉 token 上限（大幅降低推理负载）
+
+mlx:
+  trust_remote_code: true
+  bridge_audio_via_temp_file: false   # 当前默认不桥接内存音频，音频能力不足时优先回退
+
+transformers:
+  torch_dtype: "bfloat16"             # M3 Ultra 支持 bfloat16
+  device_map: "auto"
+  attn_implementation: "sdpa"         # MPS 兼容的注意力实现 (非 flash_attention_2)
+
+capability_policy:
+  on_unsupported_audio: "disable"     # disable: 丢弃音频仅用视频+文本 (fallback 模型未下载)
+  on_unsupported_batch: "batch1"      # fallback | batch1 | error
+  on_backend_error: "fallback"        # fallback | error

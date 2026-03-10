@@ -22,18 +22,17 @@ from time import perf_counter
 from typing import Any
 
 import numpy as np
-
 from PIL import Image
 
 from src.capture.audio_capture import AudioCapture
 from src.capture.stream_buffer import StreamBuffer
 from src.capture.video_capture import VideoCapture
-from src.model.qwen_omni import QwenOmniModel
+from src.model import InferenceRequest, create_inference_backend
 from src.preprocessing.frame_sampler import FrameSampler
 from src.preprocessing.roi_extractor import ROIExtractor
 from src.prompts.output_schema import EmotionResult
 from src.prompts.system_prompt import build_system_prompt
-from src.prompts.task_prompts import build_conversation, build_single_person_prompt
+from src.prompts.task_prompts import build_inference_request, build_single_person_prompt
 from src.understanding.response_parser import parse_emotion_response
 from src.understanding.state_tracker import EmotionStateTracker
 
@@ -102,16 +101,14 @@ class RealtimePipeline:
             detection_backend=str(roi_cfg.get("detection_backend", "vision")),
         )
 
-        model_path = str(model_cfg.get("local_path", "")).strip()
-        LOGGER.info("  [5/6] 初始化模型配置 (QwenOmniModel: %s) ...", model_path)
-        self.model = QwenOmniModel(
-            model_path=str(Path(model_path).expanduser()),
-            torch_dtype=str(infer_cfg.get("torch_dtype", "bfloat16")),
-            attn_implementation=str(infer_cfg.get("attn_implementation", "sdpa")),
-            max_new_tokens=int(infer_cfg.get("max_new_tokens", 128)),
-            min_pixels=int(infer_cfg.get("min_pixels", 128 * 28 * 28)),
-            max_pixels=int(infer_cfg.get("max_pixels", 256 * 28 * 28)),
-        )
+        model_path = str(
+            model_cfg.get("local_path")
+            or model_cfg.get("repo_id")
+            or ""
+        ).strip()
+        LOGGER.info("  [5/6] 初始化模型配置 (backend=%s, path=%s) ...",
+                    model_cfg.get("backend", "transformers"), model_path)
+        self.model = create_inference_backend(config)
         LOGGER.info("  [6/6] 初始化状态追踪器 (EmotionStateTracker) ...")
         self.tracker = EmotionStateTracker(
             max_history=int(understanding_cfg.get("max_history", 20))
@@ -257,14 +254,20 @@ class RealtimePipeline:
                         )
                         for f in frames
                     ]
-                    conversation = build_conversation(
+                    request = build_inference_request(
                         system_prompt=system_prompt,
                         task_prompt=task_prompt,
                         frames=resized,
                         audio=audio_input,
+                        use_audio=self._use_audio_in_video,
+                        metadata={
+                            "window_serial": window_serial,
+                            "person_idx": person_idx,
+                            "end_ts": window.end_ts,
+                        },
                     )
                     item: dict[str, Any] = {
-                        "conversation": conversation,
+                        "request": request,
                         "window_serial": window_serial,
                         "person_idx": person_idx,
                         "end_ts": window.end_ts,
@@ -307,12 +310,9 @@ class RealtimePipeline:
 
             infer_start = perf_counter()
             try:
-                has_audio = any(item["audio"] is not None for item in batch_items)
-                conversations = [item["conversation"] for item in batch_items]
-
+                requests: list[InferenceRequest] = [item["request"] for item in batch_items]
                 responses = self.model.batch_infer(
-                    conversations=conversations,
-                    use_audio_in_video=self._use_audio_in_video and has_audio,
+                    requests,
                 )
 
                 for item, response in zip(batch_items, responses):
