@@ -1,1 +1,12 @@
-"""模型层 — Qwen2.5-Omni-3B 加载与推理 (transformers + MPS)"""
+"""模型层抽象与后端工厂。"""
+
+from src.model.base import BackendCapabilities, InferenceBackend, InferenceRequest
+from src.model.factory import BackendRouter, create_inference_backend
+
+__all__ = [
+    "BackendCapabilities",
+    "BackendRouter",
+    "InferenceBackend",
+    "InferenceRequest",
+    "create_inference_backend",
+]

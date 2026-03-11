@@ -17,6 +17,7 @@ from src.prompts.output_schema import (
 from src.prompts.system_prompt import build_system_prompt
 from src.prompts.task_prompts import (
     build_conversation,
+    build_inference_request,
     build_multi_person_prompt,
     build_single_person_prompt,
 )
@@ -125,3 +126,18 @@ def test_build_conversation_without_audio() -> None:
     assert len(content) == 2
     assert content[0]["type"] == "video"
     assert content[1]["type"] == "text"
+
+
+def test_build_inference_request_extracts_system_prompt_text() -> None:
+    """应将 system message 提取为后端无关请求对象。"""
+    frames = [Image.new("RGB", (16, 16), color=(0, 0, 255))]
+    request = build_inference_request(
+        system_prompt=build_system_prompt(),
+        task_prompt="analyze",
+        frames=frames,
+    )
+
+    assert request.system_prompt
+    assert request.task_prompt == "analyze"
+    assert request.frames == frames
+    assert request.has_audio is False

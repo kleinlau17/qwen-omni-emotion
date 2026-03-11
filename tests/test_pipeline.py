@@ -96,30 +96,22 @@ class _FakeROIExtractor:
 
 
 class _FakeModel:
-    def __init__(
-        self,
-        model_path: str,
-        torch_dtype: str,
-        attn_implementation: str,
-        max_new_tokens: int,
-    ) -> None:
-        self.model_path = model_path
-        self.torch_dtype = torch_dtype
-        self.attn_implementation = attn_implementation
-        self.max_new_tokens = max_new_tokens
+    def __init__(self) -> None:
         self.load_called = False
         self.infer_called = 0
 
     def load(self) -> None:
         self.load_called = True
 
-    def infer(self, conversation: list[dict[str, Any]], use_audio_in_video: bool = True) -> str:
-        del conversation, use_audio_in_video
-        self.infer_called += 1
-        return (
-            '{"person_id":"person_0","primary_emotion":"happy","emotion_intensity":0.8,'
-            '"secondary_emotion":"neutral","confidence":0.9,"description":"stable"}'
-        )
+    def batch_infer(self, requests: list[Any]) -> list[str]:
+        self.infer_called += len(requests)
+        return [
+            (
+                '{"person_id":"person_0","primary_emotion":"happy","emotion_intensity":0.8,'
+                '"secondary_emotion":"neutral","confidence":0.9,"description":"stable"}'
+            )
+            for _ in requests
+        ]
 
 
 class _FakeTracker:
@@ -163,7 +155,7 @@ def _patch_pipeline_dependencies(monkeypatch: Any) -> None:
     monkeypatch.setattr(realtime_pipeline, "StreamBuffer", _FakeStreamBuffer)
     monkeypatch.setattr(realtime_pipeline, "FrameSampler", _FakeFrameSampler)
     monkeypatch.setattr(realtime_pipeline, "ROIExtractor", _FakeROIExtractor)
-    monkeypatch.setattr(realtime_pipeline, "QwenOmniModel", _FakeModel)
+    monkeypatch.setattr(realtime_pipeline, "create_inference_backend", lambda config: _FakeModel())
     monkeypatch.setattr(realtime_pipeline, "EmotionStateTracker", _FakeTracker)
 
 

@@ -4,9 +4,12 @@
 torch>=2.4.0
 transformers>=4.51.0
 accelerate>=1.2.0
+mlx>=0.30.0
+mlx-vlm>=0.3.12
 
 # Qwen2.5-Omni 官方工具 (多模态输入预处理)
 qwen-omni-utils>=0.0.4
+huggingface-hub>=0.24.0
 
 # 音频 I/O
 soundfile>=0.12.1
@@ -21,6 +24,8 @@ pyyaml>=6.0.1
 pyobjc-core>=10.0
 pyobjc-framework-AVFoundation>=10.0
 pyobjc-framework-CoreMedia>=10.0
+pyobjc-framework-Quartz>=10.0
+pyobjc-framework-libdispatch>=10.0
 pyobjc-framework-Vision>=10.0
 
 # 模型下载
