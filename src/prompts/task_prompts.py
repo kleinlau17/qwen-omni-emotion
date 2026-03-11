@@ -15,11 +15,7 @@ def build_single_person_prompt() -> str:
         "请对当前单人场景进行情绪分析，并返回严格 JSON。"
         "输出字段必须与以下 JSON Schema 一致，不得缺失或增加字段：\n"
         f"{SINGLE_PERSON_SCHEMA}\n"
-        "要求：\n"
-        "1) person_id 使用固定字符串 person_0；\n"
-        "2) primary_emotion 必须来自 schema 枚举；\n"
-        "3) emotion_intensity 与 confidence 为 0.0-1.0 浮点数；\n"
-        "4) description 用一句自然语言概括依据。"
+        "要求：primary_emotion 必须来自 schema 枚举；secondary_emotion 可为 null。"
     )
 
 
@@ -32,10 +28,8 @@ def build_multi_person_prompt(person_count: int) -> str:
         f"请对当前约 {person_count} 人的多人场景进行群体氛围分析，并返回严格 JSON。"
         "输出字段必须与以下 JSON Schema 一致，不得缺失或增加字段：\n"
         f"{MULTI_PERSON_SCHEMA}\n"
-        "要求：\n"
-        "1) individual_emotions 中每个人物都给出 person_id 与情绪结果；\n"
-        "2) tension_level 与 engagement_level 为 0.0-1.0 浮点数；\n"
-        "3) description 总结整体氛围及关键线索。"
+        "要求：individual_emotions 中每个人物给出 primary_emotion 与 secondary_emotion；"
+        "tension_level 与 engagement_level 为 0.0-1.0 浮点数。"
     )
 
 

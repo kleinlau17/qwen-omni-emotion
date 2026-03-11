@@ -23,29 +23,23 @@ from src.prompts.task_prompts import (
 
 
 def test_emotion_result_creation_success() -> None:
-    """应能创建合法 EmotionResult。"""
+    """应能创建合法 EmotionResult（简化版）。"""
     result = EmotionResult(
         person_id="person_0",
         primary_emotion="happy",
-        emotion_intensity=0.7,
         secondary_emotion="neutral",
-        confidence=0.9,
-        description="smiling and relaxed",
     )
     assert result.primary_emotion in VALID_EMOTIONS
-    assert result.emotion_intensity == 0.7
+    assert result.secondary_emotion == "neutral"
 
 
-def test_emotion_result_invalid_range_raises() -> None:
-    """范围非法时应抛出 ValueError。"""
+def test_emotion_result_invalid_emotion_raises() -> None:
+    """primary_emotion 非法时应抛出 ValueError。"""
     with pytest.raises(ValueError):
         EmotionResult(
             person_id="person_0",
-            primary_emotion="happy",
-            emotion_intensity=1.2,
+            primary_emotion="invalid_emotion",
             secondary_emotion=None,
-            confidence=0.9,
-            description="invalid intensity",
         )
 
 
@@ -54,17 +48,13 @@ def test_atmosphere_result_creation_success() -> None:
     item = EmotionResult(
         person_id="person_1",
         primary_emotion="neutral",
-        emotion_intensity=0.4,
         secondary_emotion=None,
-        confidence=0.8,
-        description="calm expression",
     )
     result = AtmosphereResult(
         overall_mood="focused",
         tension_level=0.3,
         engagement_level=0.75,
         individual_emotions=[item],
-        description="group appears attentive",
     )
     assert result.individual_emotions[0].person_id == "person_1"
 
@@ -90,7 +80,7 @@ def test_build_task_prompts_contain_schema() -> None:
     """任务 prompt 应包含 schema 片段。"""
     single = build_single_person_prompt()
     multi = build_multi_person_prompt(person_count=3)
-    assert '"person_id"' in single
+    assert '"primary_emotion"' in single
     assert '"individual_emotions"' in multi
 
 

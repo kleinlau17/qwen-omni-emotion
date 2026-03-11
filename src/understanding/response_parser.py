@@ -52,16 +52,13 @@ def parse_emotion_response(raw_text: str) -> EmotionResult | None:
 
     try:
         return EmotionResult(
-            person_id=str(payload["person_id"]),
+            person_id="person_0",
             primary_emotion=str(payload["primary_emotion"]),
-            emotion_intensity=float(payload["emotion_intensity"]),
             secondary_emotion=(
                 str(payload["secondary_emotion"])
                 if payload.get("secondary_emotion") is not None
                 else None
             ),
-            confidence=float(payload["confidence"]),
-            description=str(payload["description"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
         LOGGER.warning("Invalid emotion payload: %s, raw: %s", exc, raw_text)
@@ -81,19 +78,16 @@ def parse_atmosphere_response(raw_text: str) -> AtmosphereResult | None:
             raise ValueError("individual_emotions must be a list.")
 
         individuals: list[EmotionResult] = []
-        for item in individuals_raw:
+        for idx, item in enumerate(individuals_raw):
             individuals.append(
                 EmotionResult(
-                    person_id=str(item["person_id"]),
+                    person_id=f"person_{idx}",
                     primary_emotion=str(item["primary_emotion"]),
-                    emotion_intensity=float(item["emotion_intensity"]),
                     secondary_emotion=(
                         str(item["secondary_emotion"])
                         if item.get("secondary_emotion") is not None
                         else None
                     ),
-                    confidence=float(item["confidence"]),
-                    description=str(item["description"]),
                 )
             )
 
@@ -102,7 +96,6 @@ def parse_atmosphere_response(raw_text: str) -> AtmosphereResult | None:
             tension_level=float(payload["tension_level"]),
             engagement_level=float(payload["engagement_level"]),
             individual_emotions=individuals,
-            description=str(payload["description"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
         LOGGER.warning("Invalid atmosphere payload: %s, raw: %s", exc, raw_text)

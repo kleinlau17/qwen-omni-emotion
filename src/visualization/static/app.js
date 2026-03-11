@@ -89,28 +89,40 @@ function updateEmotionCards(emotions) {
     const e = emotions[personId];
     const card = document.createElement("div");
     card.className = "emotion-card";
-    const intensityPct = Math.round(e.emotion_intensity * 100);
-    const confidencePct = Math.round(e.confidence * 100);
+    const hasIntensity = typeof e.emotion_intensity === "number";
+    const hasConfidence = typeof e.confidence === "number";
+    const intensityPct = hasIntensity ? Math.round(e.emotion_intensity * 100) : null;
+    const confidencePct = hasConfidence ? Math.round(e.confidence * 100) : null;
     const primaryLabel = EMOTION_LABELS[e.primary_emotion] || e.primary_emotion;
     const secondaryLabel = e.secondary_emotion
       ? (EMOTION_LABELS[e.secondary_emotion] || e.secondary_emotion)
       : "无";
 
+    const confidenceHtml = confidencePct != null
+      ? `<span class="confidence-badge">置信度 ${confidencePct}%</span>`
+      : "";
+    const intensityHtml = intensityPct != null
+      ? `<div class="intensity-bar-container">
+          <span class="intensity-label">${intensityPct}%</span>
+          <div class="intensity-bar-bg">
+            <div class="intensity-bar-fill bar-${e.primary_emotion}"
+                 style="width: ${intensityPct}%"></div>
+          </div>
+        </div>`
+      : "";
+    const descriptionHtml = e.description != null && e.description !== ""
+      ? `<div class="description">${escapeHtml(e.description)}</div>`
+      : "";
+
     card.innerHTML = `
       <div class="card-header">
-        <span class="person-id">${escapeHtml(e.person_id)}</span>
-        <span class="confidence-badge">置信度 ${confidencePct}%</span>
+        <span class="person-id">${escapeHtml(e.person_id != null ? e.person_id : personId)}</span>
+        ${confidenceHtml}
       </div>
       <div class="primary-emotion emotion-${e.primary_emotion}">${primaryLabel}</div>
       <div class="secondary-emotion">次要情绪: ${secondaryLabel}</div>
-      <div class="intensity-bar-container">
-        <span class="intensity-label">${intensityPct}%</span>
-        <div class="intensity-bar-bg">
-          <div class="intensity-bar-fill bar-${e.primary_emotion}"
-               style="width: ${intensityPct}%"></div>
-        </div>
-      </div>
-      <div class="description">${escapeHtml(e.description)}</div>
+      ${intensityHtml}
+      ${descriptionHtml}
     `;
     fragment.appendChild(card);
   }
@@ -178,13 +190,15 @@ function updateTrendChart(trends) {
     }
     if (dataPoints.length > 0) {
       const latest = dataPoints[dataPoints.length - 1];
-      trendHistory[personId].push({
-        time: now,
-        intensity: latest.emotion_intensity,
-        emotion: latest.primary_emotion
-      });
-      if (trendHistory[personId].length > MAX_TREND_POINTS) {
-        trendHistory[personId].shift();
+      if (typeof latest.emotion_intensity === "number") {
+        trendHistory[personId].push({
+          time: now,
+          intensity: latest.emotion_intensity,
+          emotion: latest.primary_emotion
+        });
+        if (trendHistory[personId].length > MAX_TREND_POINTS) {
+          trendHistory[personId].shift();
+        }
       }
     }
   }

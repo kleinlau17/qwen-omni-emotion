@@ -50,14 +50,10 @@ class MockPipeline:
             for i in range(person_count):
                 pid = f"person_{i}"
                 emotion = random.choice(VALID_EMOTIONS)
-                intensity = round(random.uniform(0.2, 0.95), 2)
                 result = EmotionResult(
                     person_id=pid,
                     primary_emotion=emotion,
-                    emotion_intensity=intensity,
                     secondary_emotion=random.choice([None, random.choice(VALID_EMOTIONS)]),
-                    confidence=round(random.uniform(0.6, 0.98), 2),
-                    description=f"模拟数据 #{tick}: 检测到 {emotion} 情绪",
                 )
                 self._emotions[pid] = result
                 if pid not in self._trends:
@@ -72,10 +68,10 @@ class MockPipeline:
             pid: {
                 "person_id": r.person_id,
                 "primary_emotion": r.primary_emotion,
-                "emotion_intensity": r.emotion_intensity,
                 "secondary_emotion": r.secondary_emotion,
-                "confidence": r.confidence,
-                "description": r.description,
+                "emotion_intensity": None,
+                "confidence": None,
+                "description": None,
             }
             for pid, r in self._emotions.items()
         }
@@ -107,8 +103,8 @@ class MockPipeline:
             trends[pid] = [
                 {
                     "primary_emotion": r.primary_emotion,
-                    "emotion_intensity": r.emotion_intensity,
-                    "confidence": r.confidence,
+                    "emotion_intensity": None,
+                    "confidence": None,
                 }
                 for r in items
             ]

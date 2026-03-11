@@ -11,7 +11,7 @@ inference:
   device_map: "auto"              # 自动选择设备 (MPS)
   attn_implementation: "sdpa"     # MPS 兼容的注意力实现 (非 flash_attention_2)
   use_audio_in_video: true        # 视频中的音频是否送入模型
-  max_new_tokens: 128             # 单次推理最大生成 token 数（JSON 输出仅需 ~100 token）
+  max_new_tokens: 24             # 单次推理最大生成 token 数（JSON 输出仅需 ~100 token）
   return_audio: false             # 不需要模型生成语音（仅文本输出）
   min_pixels: 100352              # 128 * 28 * 28 — Processor 视觉 token 下限
   max_pixels: 200704              # 256 * 28 * 28 — Processor 视觉 token 上限（大幅降低推理负载）

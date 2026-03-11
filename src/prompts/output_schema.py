@@ -24,14 +24,14 @@ def _validate_unit_interval(value: float, field_name: str) -> None:
 
 @dataclass
 class EmotionResult:
-    """单个人物情绪分析结果。"""
+    """单个人物情绪分析结果（简化版，仅 primary_emotion + secondary_emotion）。
+
+    person_id 由 pipeline 根据 person_idx 赋值，用于内部追踪，不由模型输出。
+    """
 
     person_id: str
     primary_emotion: str
-    emotion_intensity: float
     secondary_emotion: str | None
-    confidence: float
-    description: str
 
     def __post_init__(self) -> None:
         """执行字段合法性校验。"""
@@ -43,23 +43,18 @@ class EmotionResult:
             raise ValueError(
                 f"secondary_emotion must be one of {VALID_EMOTIONS}, got {self.secondary_emotion}."
             )
-        _validate_unit_interval(self.emotion_intensity, "emotion_intensity")
-        _validate_unit_interval(self.confidence, "confidence")
         if not self.person_id.strip():
             raise ValueError("person_id must not be empty.")
-        if not self.description.strip():
-            raise ValueError("description must not be empty.")
 
 
 @dataclass
 class AtmosphereResult:
-    """多人场景的群体氛围分析结果。"""
+    """多人场景的群体氛围分析结果（简化版）。"""
 
     overall_mood: str
     tension_level: float
     engagement_level: float
     individual_emotions: list[EmotionResult]
-    description: str
 
     def __post_init__(self) -> None:
         """执行字段合法性校验。"""
@@ -67,37 +62,25 @@ class AtmosphereResult:
         _validate_unit_interval(self.engagement_level, "engagement_level")
         if not self.overall_mood.strip():
             raise ValueError("overall_mood must not be empty.")
-        if not self.description.strip():
-            raise ValueError("description must not be empty.")
         if not isinstance(self.individual_emotions, list):
             raise ValueError("individual_emotions must be a list of EmotionResult.")
         if not all(isinstance(item, EmotionResult) for item in self.individual_emotions):
             raise ValueError("individual_emotions must contain EmotionResult only.")
 
 
+# 模型输出 schema（简化：仅 primary_emotion + secondary_emotion）
 _EMOTION_RESULT_SCHEMA: dict[str, object] = {
     "type": "object",
     "additionalProperties": False,
-    "required": [
-        "person_id",
-        "primary_emotion",
-        "emotion_intensity",
-        "secondary_emotion",
-        "confidence",
-        "description",
-    ],
+    "required": ["primary_emotion", "secondary_emotion"],
     "properties": {
-        "person_id": {"type": "string", "minLength": 1},
         "primary_emotion": {"type": "string", "enum": VALID_EMOTIONS},
-        "emotion_intensity": {"type": "number", "minimum": 0.0, "maximum": 1.0},
         "secondary_emotion": {
             "anyOf": [
                 {"type": "string", "enum": VALID_EMOTIONS},
                 {"type": "null"},
             ]
         },
-        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-        "description": {"type": "string", "minLength": 1},
     },
 }
 
@@ -120,7 +103,6 @@ MULTI_PERSON_SCHEMA: str = json.dumps(
             "tension_level",
             "engagement_level",
             "individual_emotions",
-            "description",
         ],
         "properties": {
             "overall_mood": {"type": "string", "minLength": 1},
@@ -130,7 +112,6 @@ MULTI_PERSON_SCHEMA: str = json.dumps(
                 "type": "array",
                 "items": _EMOTION_RESULT_SCHEMA,
             },
-            "description": {"type": "string", "minLength": 1},
         },
     },
     indent=2,

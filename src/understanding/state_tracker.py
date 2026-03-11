@@ -38,7 +38,7 @@ class EmotionStateTracker:
             return [item[0] for item in list(person_history)[-window_count:]]
 
     def detect_change(self, person_id: str, threshold: float = 0.3) -> bool:
-        """检测人物最近两次情绪强度变化是否超过阈值。"""
+        """检测人物最近两次主要情绪是否发生变化。"""
         if threshold < 0.0:
             raise ValueError("threshold must be non-negative.")
         with self._lock:
@@ -47,7 +47,7 @@ class EmotionStateTracker:
                 return False
             latest = person_history[-1][0]
             previous = person_history[-2][0]
-            return abs(latest.emotion_intensity - previous.emotion_intensity) > threshold
+            return latest.primary_emotion != previous.primary_emotion
 
     def get_current_state(self, person_id: str) -> EmotionResult | None:
         """获取人物当前最新情绪状态。"""

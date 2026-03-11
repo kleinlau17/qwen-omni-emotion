@@ -10,32 +10,28 @@ from src.understanding.state_tracker import EmotionStateTracker
 
 
 def test_parse_emotion_response_valid_json() -> None:
-    """合法 JSON 应解析成功。"""
+    """合法 JSON 应解析成功（简化 schema：仅 primary_emotion + secondary_emotion）。"""
     raw_text = """
     {
-      "person_id": "person_0",
       "primary_emotion": "happy",
-      "emotion_intensity": 0.82,
-      "secondary_emotion": "surprised",
-      "confidence": 0.91,
-      "description": "smiling with energetic tone"
+      "secondary_emotion": "surprised"
     }
     """
     result = parse_emotion_response(raw_text)
     assert isinstance(result, EmotionResult)
     assert result.primary_emotion == "happy"
+    assert result.secondary_emotion == "surprised"
+    assert result.person_id == "person_0"
 
 
 def test_parse_emotion_response_embedded_json() -> None:
     """JSON 被包裹在其它文本中时也应能提取。"""
     raw_text = (
-        'analysis result >>> {"person_id":"person_1","primary_emotion":"neutral",'
-        '"emotion_intensity":0.31,"secondary_emotion":null,"confidence":0.7,'
-        '"description":"calm and steady"} <<< end'
+        'analysis result >>> {"primary_emotion":"neutral","secondary_emotion":null} <<< end'
     )
     result = parse_emotion_response(raw_text)
     assert result is not None
-    assert result.person_id == "person_1"
+    assert result.person_id == "person_0"
 
 
 def test_parse_emotion_response_non_json_returns_none() -> None:
@@ -45,7 +41,7 @@ def test_parse_emotion_response_non_json_returns_none() -> None:
 
 
 def test_parse_atmosphere_response_valid_json() -> None:
-    """合法多人 JSON 应解析为 AtmosphereResult。"""
+    """合法多人 JSON 应解析为 AtmosphereResult（简化 schema）。"""
     raw_text = """
     {
       "overall_mood": "focused",
@@ -53,15 +49,10 @@ def test_parse_atmosphere_response_valid_json() -> None:
       "engagement_level": 0.88,
       "individual_emotions": [
         {
-          "person_id": "person_0",
           "primary_emotion": "neutral",
-          "emotion_intensity": 0.4,
-          "secondary_emotion": null,
-          "confidence": 0.83,
-          "description": "watching attentively"
+          "secondary_emotion": null
         }
-      ],
-      "description": "group is attentive and collaborative"
+      ]
     }
     """
     result = parse_atmosphere_response(raw_text)
@@ -82,10 +73,7 @@ def test_state_tracker_update_and_get_current_state() -> None:
     first = EmotionResult(
         person_id="person_0",
         primary_emotion="neutral",
-        emotion_intensity=0.2,
         secondary_emotion=None,
-        confidence=0.8,
-        description="baseline",
     )
     tracker.update(first, timestamp=1000.0)
     current = tracker.get_current_state("person_0")
@@ -94,16 +82,13 @@ def test_state_tracker_update_and_get_current_state() -> None:
 
 
 def test_state_tracker_get_trend_and_detect_change() -> None:
-    """趋势查询与突变检测应符合阈值逻辑。"""
+    """趋势查询与 primary_emotion 突变检测。"""
     tracker = EmotionStateTracker(max_history=20)
     tracker.update(
         EmotionResult(
             person_id="person_0",
             primary_emotion="neutral",
-            emotion_intensity=0.1,
             secondary_emotion=None,
-            confidence=0.7,
-            description="calm",
         ),
         timestamp=1001.0,
     )
@@ -111,10 +96,7 @@ def test_state_tracker_get_trend_and_detect_change() -> None:
         EmotionResult(
             person_id="person_0",
             primary_emotion="angry",
-            emotion_intensity=0.65,
             secondary_emotion=None,
-            confidence=0.85,
-            description="strong voice and tense posture",
         ),
         timestamp=1002.0,
     )
@@ -133,15 +115,11 @@ def test_state_tracker_update_with_atmosphere_result() -> None:
         engagement_level=0.9,
         individual_emotions=[
             EmotionResult(
-                person_id="person_2",
+                person_id="person_0",
                 primary_emotion="happy",
-                emotion_intensity=0.76,
                 secondary_emotion=None,
-                confidence=0.88,
-                description="smiling and nodding",
             )
         ],
-        description="positive collaboration",
     )
     tracker.update(atmosphere, timestamp=1003.0)
-    assert tracker.get_current_state("person_2") is not None
+    assert tracker.get_current_state("person_0") is not None

@@ -116,10 +116,7 @@ class _FakeModel:
     def infer(self, conversation: list[dict[str, Any]], use_audio_in_video: bool = True) -> str:
         del conversation, use_audio_in_video
         self.infer_called += 1
-        return (
-            '{"person_id":"person_0","primary_emotion":"happy","emotion_intensity":0.8,'
-            '"secondary_emotion":"neutral","confidence":0.9,"description":"stable"}'
-        )
+        return '{"primary_emotion":"happy","secondary_emotion":"neutral"}'
 
 
 class _FakeTracker:

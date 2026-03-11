@@ -56,8 +56,7 @@ def build_conversation(frames: list[Image.Image]) -> list[dict[str, Any]]:
                 {"type": "video", "video": frames},
                 {"type": "text", "text": (
                     "请对当前单人场景进行情绪分析，并返回严格 JSON。"
-                    '{"person_id":"person_0","primary_emotion":"...","emotion_intensity":0.0,'
-                    '"secondary_emotion":null,"confidence":0.0,"description":"..."}'
+                    '{"primary_emotion":"happy","secondary_emotion":null}'
                 )},
             ],
         },

@@ -316,6 +316,10 @@ class RealtimePipeline:
                 )
 
                 for item, response in zip(batch_items, responses):
+                    LOGGER.info(
+                        "模型原始输出 (完整):\n%s",
+                        response if isinstance(response, str) else repr(response),
+                    )
                     result = parse_emotion_response(response)
                     if result is None:
                         LOGGER.warning(
@@ -323,13 +327,15 @@ class RealtimePipeline:
                             item["window_serial"], item["person_idx"],
                         )
                         continue
+                    LOGGER.info(
+                        "解析结果: primary_emotion=%s secondary_emotion=%s",
+                        result.primary_emotion,
+                        result.secondary_emotion,
+                    )
                     normalized = EmotionResult(
                         person_id=f"person_{item['person_idx']}",
                         primary_emotion=result.primary_emotion,
-                        emotion_intensity=result.emotion_intensity,
                         secondary_emotion=result.secondary_emotion,
-                        confidence=result.confidence,
-                        description=result.description,
                     )
                     self.tracker.update(normalized, timestamp=item["end_ts"])
                     with self._state_lock:
@@ -364,16 +370,20 @@ class RealtimePipeline:
                 LOGGER.exception("推理异常，跳过当前批次")
 
     def get_current_state(self) -> dict[str, dict[str, Any]]:
-        """返回当前已知人物情绪状态快照。"""
+        """返回当前已知人物情绪状态快照。
+
+        保留 emotion_intensity、confidence、description 字段（值为 None），
+        供 Web 端保持结构但不刷新展示。
+        """
         with self._state_lock:
             return {
                 person_id: {
                     "person_id": item.person_id,
                     "primary_emotion": item.primary_emotion,
-                    "emotion_intensity": item.emotion_intensity,
                     "secondary_emotion": item.secondary_emotion,
-                    "confidence": item.confidence,
-                    "description": item.description,
+                    "emotion_intensity": None,
+                    "confidence": None,
+                    "description": None,
                 }
                 for person_id, item in self._latest_states.items()
             }
@@ -420,8 +430,8 @@ class RealtimePipeline:
             trends[person_id] = [
                 {
                     "primary_emotion": r.primary_emotion,
-                    "emotion_intensity": r.emotion_intensity,
-                    "confidence": r.confidence,
+                    "emotion_intensity": None,
+                    "confidence": None,
                 }
                 for r in results
             ]

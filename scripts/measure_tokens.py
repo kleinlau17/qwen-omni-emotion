@@ -11,58 +11,24 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 # ── 模拟各种长度的真实输出 ──
 
 samples = {
-    "最短输出 (英文 description, null secondary)": json.dumps({
-        "person_id": "person_0",
+    "最短输出 (null secondary)": json.dumps({
         "primary_emotion": "neutral",
-        "emotion_intensity": 0.3,
         "secondary_emotion": None,
-        "confidence": 0.8,
-        "description": "The person appears calm with a relaxed posture."
     }, ensure_ascii=False),
 
-    "典型输出 (英文 description, 有 secondary)": json.dumps({
-        "person_id": "person_0",
+    "典型输出 (有 secondary)": json.dumps({
         "primary_emotion": "happy",
-        "emotion_intensity": 0.75,
         "secondary_emotion": "surprised",
-        "confidence": 0.85,
-        "description": "The person is smiling broadly with raised eyebrows, suggesting genuine happiness mixed with pleasant surprise."
-    }, ensure_ascii=False),
-
-    "中文 description (较长)": json.dumps({
-        "person_id": "person_0",
-        "primary_emotion": "sad",
-        "emotion_intensity": 0.6,
-        "secondary_emotion": "fearful",
-        "confidence": 0.7,
-        "description": "该人物眉头紧锁，嘴角下垂，肩膀微微内收，整体表现出悲伤情绪，同时眼神中流露出一丝不安。"
-    }, ensure_ascii=False),
-
-    "最长合理输出 (详细中文 description)": json.dumps({
-        "person_id": "person_0",
-        "primary_emotion": "angry",
-        "emotion_intensity": 0.9,
-        "secondary_emotion": "contemptuous",
-        "confidence": 0.92,
-        "description": "该人物面部表情紧绷，眉毛压低且内聚，嘴唇紧闭呈一字形，下颌肌肉明显紧张。肢体语言上双手握拳，身体前倾，整体姿态传达出强烈的愤怒情绪，同时嘴角一侧微微上扬带有轻蔑意味。"
     }, ensure_ascii=False),
 
     "模型可能带前缀的情况": '```json\n' + json.dumps({
-        "person_id": "person_0",
         "primary_emotion": "happy",
-        "emotion_intensity": 0.8,
         "secondary_emotion": None,
-        "confidence": 0.9,
-        "description": "The person shows a warm smile with relaxed body language."
     }, ensure_ascii=False) + '\n```',
 
     "带缩进的 JSON (模型有时会格式化)": json.dumps({
-        "person_id": "person_0",
         "primary_emotion": "surprised",
-        "emotion_intensity": 0.7,
         "secondary_emotion": "happy",
-        "confidence": 0.82,
-        "description": "Wide eyes and open mouth indicate surprise, with subtle smile suggesting positive reaction."
     }, indent=2, ensure_ascii=False),
 }
 
@@ -95,7 +61,7 @@ print()
 print("─" * 70)
 print("截断风险测试 (典型输出在不同 token 限制下是否仍为合法 JSON):")
 print("─" * 70)
-typical = samples["典型输出 (英文 description, 有 secondary)"]
+typical = samples["典型输出 (有 secondary)"]
 token_ids = tokenizer.encode(typical, add_special_tokens=False)
 full_len = len(token_ids)
 
