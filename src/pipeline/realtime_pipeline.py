@@ -76,11 +76,12 @@ class RealtimePipeline:
             resolution=(video_resolution[0], video_resolution[1]),
             fps=int(video_cfg.get("fps", 30)),
         )
-        LOGGER.info("  [3/6] 初始化音频采集 (AudioCapture %dHz) ...",
-                    int(audio_cfg.get("sample_rate", 16000)))
+        audio_sample_rate = int(audio_cfg.get("sample_rate", 16000))
+        audio_channels = int(audio_cfg.get("channels", 1))
+        LOGGER.info("  [3/6] 初始化音频采集 (AudioCapture %dHz) ...", audio_sample_rate)
         self.audio_capture = AudioCapture(
-            sample_rate=int(audio_cfg.get("sample_rate", 16000)),
-            channels=int(audio_cfg.get("channels", 1)),
+            sample_rate=audio_sample_rate,
+            channels=audio_channels,
         )
         self._batch_size: int = int(perf_cfg.get("batch_size", 1))
 
@@ -152,6 +153,15 @@ class RealtimePipeline:
         self._metrics_history: deque[dict[str, Any]] = deque(maxlen=100)
         self._person_count: int = 0
         self._inference_count: int = 0
+
+        self._history_lock = Lock()
+        self._history: deque[dict[str, Any]] = deque(
+            maxlen=int(understanding_cfg.get("history_max_items", 32))
+        )
+        self._next_history_id: int = 1
+
+        self._audio_sample_rate: int = audio_sample_rate
+        self._audio_channels: int = audio_channels
 
     def start(self) -> None:
         """加载模型并启动采集与双线程流水线。"""
@@ -248,6 +258,20 @@ class RealtimePipeline:
 
                 audio = window.get_audio_array()
                 audio_input = audio if audio.size > 0 else None
+                if audio_input is not None:
+                    try:
+                        duration_seconds = float(audio_input.shape[0]) / max(
+                            float(self._audio_sample_rate), 1.0
+                        )
+                    except Exception:
+                        duration_seconds = -1.0
+                    LOGGER.info(
+                        "预处理窗口 #%d: audio_samples=%d, sample_rate=%d, duration=%.3fs",
+                        window_serial,
+                        int(audio_input.shape[0]),
+                        int(self._audio_sample_rate),
+                        duration_seconds,
+                    )
                 person_frames = self._prepare_person_inputs(sampled_frames)
 
                 for person_idx, frames in enumerate(person_frames):
@@ -270,6 +294,7 @@ class RealtimePipeline:
                         "end_ts": window.end_ts,
                         "audio": audio_input,
                         "prep_done_ts": perf_counter(),
+                        "frames": frames,
                     }
                     while self._is_running():
                         try:
@@ -340,6 +365,12 @@ class RealtimePipeline:
                     self.tracker.update(normalized, timestamp=item["end_ts"])
                     with self._state_lock:
                         self._latest_states[normalized.person_id] = normalized
+                    self._append_history(
+                        result=normalized,
+                        end_ts=item["end_ts"],
+                        audio=item["audio"],
+                        frames=item.get("frames", []),
+                    )
 
                 infer_ms = (perf_counter() - infer_start) * 1000.0
                 total_items = len(batch_items)
@@ -368,6 +399,46 @@ class RealtimePipeline:
                 )
             except Exception:
                 LOGGER.exception("推理异常，跳过当前批次")
+
+    def _append_history(
+        self,
+        result: EmotionResult,
+        end_ts: float,
+        audio: Any | None,
+        frames: list[Any],
+    ) -> None:
+        """将本次推理结果追加到内存历史，用于 Web 端回放多帧 + 音频。"""
+        frame_list: list[Any] = []
+        for f in frames:
+            try:
+                frame_list.append(np.asarray(f).copy())
+            except Exception:
+                continue
+
+        audio_copy: Any | None = None
+        if audio is not None:
+            try:
+                audio_copy = np.asarray(audio).copy()
+            except Exception:
+                audio_copy = None
+
+        with self._history_lock:
+            item_id = self._next_history_id
+            self._next_history_id += 1
+            self._history.append(
+                {
+                    "id": item_id,
+                    "person_id": result.person_id,
+                    "primary_emotion": result.primary_emotion,
+                    "secondary_emotion": result.secondary_emotion,
+                    "emotion_intensity": None,
+                    "confidence": None,
+                    "description": None,
+                    "timestamp": end_ts,
+                    "frames": frame_list,
+                    "audio": audio_copy,
+                }
+            )
 
     def get_current_state(self) -> dict[str, dict[str, Any]]:
         """返回当前已知人物情绪状态快照。
@@ -407,6 +478,7 @@ class RealtimePipeline:
                 "person_count": 0,
                 "inference_count": 0,
                 "within_budget": True,
+                "running": self._is_running(),
             }
 
         latencies = [h["latency_ms"] for h in history]
@@ -417,6 +489,7 @@ class RealtimePipeline:
             "person_count": person_count,
             "inference_count": inference_count,
             "within_budget": latest["within_budget"],
+            "running": self._is_running(),
         }
 
     def get_emotion_trends(self, window_count: int = 10) -> dict[str, list[dict[str, Any]]]:
@@ -436,6 +509,56 @@ class RealtimePipeline:
                 for r in results
             ]
         return trends
+
+    def get_inference_history(self, limit: int = 20) -> list[dict[str, Any]]:
+        """返回最近若干次推理的概要历史（不包含原始媒体数据）。"""
+        with self._history_lock:
+            items = list(self._history)[-limit:]
+        return [
+            {
+                "id": item["id"],
+                "person_id": item["person_id"],
+                "primary_emotion": item["primary_emotion"],
+                "secondary_emotion": item["secondary_emotion"],
+                "emotion_intensity": item["emotion_intensity"],
+                "confidence": item["confidence"],
+                "description": item["description"],
+                "timestamp": item["timestamp"],
+                "frame_count": len(item.get("frames") or []),
+            }
+            for item in items
+        ]
+
+    def get_history_media(
+        self,
+        item_id: int,
+    ) -> tuple[list[np.ndarray], np.ndarray | None]:
+        """根据历史条目 ID 获取对应的多帧和音频数组。"""
+        with self._history_lock:
+            for item in self._history:
+                if item.get("id") == item_id:
+                    frames = item.get("frames") or []
+                    audio = item.get("audio")
+                    frame_list: list[np.ndarray] = []
+                    for f in frames:
+                        try:
+                            frame_list.append(np.asarray(f).copy())
+                        except Exception:
+                            continue
+                    audio_arr = (
+                        np.asarray(audio).copy()
+                        if audio is not None
+                        else None
+                    )
+                    return frame_list, audio_arr
+        return [], None
+
+    def get_audio_format(self) -> dict[str, int]:
+        """返回音频格式信息，供 Web 端导出 WAV 使用。"""
+        return {
+            "sample_rate": self._audio_sample_rate,
+            "channels": self._audio_channels,
+        }
 
     def _prepare_person_inputs(self, sampled_frames: list[Any]) -> list[list[Any]]:
         """

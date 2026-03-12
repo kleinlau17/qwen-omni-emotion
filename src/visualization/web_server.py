@@ -6,11 +6,13 @@ import io
 import json
 import logging
 import time
+import wave
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, StreamingResponse
+import numpy as np
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 if TYPE_CHECKING:
@@ -68,6 +70,56 @@ def create_app(pipeline: RealtimePipeline, config: dict[str, Any]) -> FastAPI:
         except Exception:
             LOGGER.exception("WebSocket 推送异常")
 
+    @app.post("/api/pipeline/start")
+    async def api_pipeline_start() -> dict[str, str]:
+        """启动实时推理流水线。"""
+        try:
+            pipeline.start()
+            return {"status": "ok"}
+        except Exception as exc:  # pragma: no cover - 运行时保护
+            LOGGER.exception("启动流水线失败")
+            raise HTTPException(status_code=500, detail="failed to start pipeline") from exc
+
+    @app.post("/api/pipeline/pause")
+    async def api_pipeline_pause() -> dict[str, str]:
+        """暂停实时推理流水线。"""
+        try:
+            pipeline.stop()
+            return {"status": "ok"}
+        except Exception as exc:  # pragma: no cover - 运行时保护
+            LOGGER.exception("暂停流水线失败")
+            raise HTTPException(status_code=500, detail="failed to pause pipeline") from exc
+
+    @app.get("/api/history/frame/{item_id}/{index}")
+    async def api_history_frame(item_id: int, index: int) -> Response:
+        """根据推理历史条目 ID 和帧索引返回对应帧的 JPEG 图像。"""
+        frames, _ = pipeline.get_history_media(item_id)
+        if not frames or Image is None:
+            raise HTTPException(status_code=404, detail="frame not found")
+        idx = max(0, min(index, len(frames) - 1))
+        jpg_bytes = _encode_frame_jpeg(frames[idx], mjpeg_quality)
+        return Response(content=jpg_bytes, media_type="image/jpeg")
+
+    @app.get("/api/history/audio/{item_id}")
+    async def api_history_audio(item_id: int) -> Response:
+        """根据推理历史条目 ID 返回对应音频的 WAV 文件。"""
+        _, audio = pipeline.get_history_media(item_id)
+        if audio is None:
+            raise HTTPException(status_code=404, detail="audio not found")
+
+        audio_cfg = pipeline.get_audio_format()
+        wav_bytes = _encode_audio_wav(
+            audio,
+            sample_rate=int(audio_cfg.get("sample_rate", 16000)),
+            channels=int(audio_cfg.get("channels", 1)),
+        )
+        return Response(content=wav_bytes, media_type="audio/wav")
+
+    @app.get("/api/history")
+    async def api_history(limit: int = 20) -> dict[str, Any]:
+        """调试/查询接口：返回最近若干次推理历史概要。"""
+        return {"items": pipeline.get_inference_history(limit=limit)}
+
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     return app
@@ -103,6 +155,22 @@ def _encode_frame_jpeg(frame: Any, quality: int) -> bytes:
     return buf.getvalue()
 
 
+def _encode_audio_wav(audio: Any, sample_rate: int, channels: int) -> bytes:
+    """将 float32 音频数组编码为 16bit PCM WAV 字节。"""
+    audio_np = np.asarray(audio, dtype=np.float32)
+    if audio_np.ndim == 1 and channels > 1:
+        audio_np = np.tile(audio_np[:, None], (1, channels))
+    audio_np = np.clip(audio_np, -1.0, 1.0)
+    pcm16 = (audio_np * 32767.0).astype(np.int16)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm16.tobytes())
+    return buf.getvalue()
+
+
 def _build_ws_payload(pipeline: RealtimePipeline) -> dict[str, Any]:
     """汇聚 pipeline 各接口数据为一个 WebSocket 推送包。"""
     return {
@@ -110,6 +178,7 @@ def _build_ws_payload(pipeline: RealtimePipeline) -> dict[str, Any]:
         "emotions": pipeline.get_current_state(),
         "metrics": pipeline.get_performance_metrics(),
         "trends": pipeline.get_emotion_trends(),
+        "history": pipeline.get_inference_history(),
     }
 
 

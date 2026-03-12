@@ -17,6 +17,7 @@ const EMOTION_COLORS = {
 let ws = null;
 let reconnectTimer = null;
 const WS_URL = `ws://${location.host}/ws`;
+let historyFrozen = false;
 
 function connectWebSocket() {
   if (ws && ws.readyState <= WebSocket.OPEN) return;
@@ -33,7 +34,9 @@ function connectWebSocket() {
     try {
       const data = JSON.parse(event.data);
       updateStatusBar(data.metrics);
-      updateEmotionCards(data.emotions);
+      if (!historyFrozen) {
+        updateEmotionCards(data.history);
+      }
       updateTrendChart(data.trends);
     } catch (e) {
       console.error("WebSocket 消息解析失败:", e);
@@ -71,22 +74,33 @@ function updateStatusBar(metrics) {
   document.getElementById("sys-avg-latency").textContent = `${metrics.avg_latency_ms} ms`;
   document.getElementById("sys-person-count").textContent = metrics.person_count;
   document.getElementById("sys-inference-count").textContent = metrics.inference_count;
+
+  const statusEl = document.getElementById("sys-status");
+  if (metrics.running === false) {
+    statusEl.textContent = "已暂停";
+    statusEl.className = "status-value status-warn";
+  } else {
+    statusEl.textContent = "运行中";
+    statusEl.className = "status-value status-ok";
+  }
 }
 
-// ── 情绪卡片渲染 ───────────────────────────────────────────
+// ── 情绪卡片渲染（推理历史） ─────────────────────────────────
 
-function updateEmotionCards(emotions) {
+function updateEmotionCards(history) {
   const container = document.getElementById("emotion-cards");
-  if (!emotions || Object.keys(emotions).length === 0) {
+  if (!history || history.length === 0) {
     container.innerHTML = '<div class="empty-hint">等待推理结果...</div>';
     return;
   }
 
-  const sortedIds = Object.keys(emotions).sort();
+  const sortedHistory = history
+    .slice()
+    .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
   const fragment = document.createDocumentFragment();
 
-  for (const personId of sortedIds) {
-    const e = emotions[personId];
+  for (const item of sortedHistory.reverse()) {
+    const e = item;
     const card = document.createElement("div");
     card.className = "emotion-card";
     const hasIntensity = typeof e.emotion_intensity === "number";
@@ -113,11 +127,38 @@ function updateEmotionCards(emotions) {
     const descriptionHtml = e.description != null && e.description !== ""
       ? `<div class="description">${escapeHtml(e.description)}</div>`
       : "";
+    const ts =
+      typeof e.timestamp === "number"
+        ? new Date(e.timestamp * 1000).toLocaleTimeString("zh-CN", {
+            hour12: false,
+          })
+        : "";
+    const frameCount = typeof e.frame_count === "number" ? e.frame_count : 0;
+    const frameThumbs = [];
+    for (let i = 0; i < frameCount; i++) {
+      const frameUrl = `/api/history/frame/${encodeURIComponent(
+        e.id
+      )}/${i}`;
+      frameThumbs.push(
+        `<img class="history-frame" src="${frameUrl}" alt="帧 ${i + 1}" />`
+      );
+    }
+    const framesHtml = frameThumbs.length
+      ? `<div class="frame-strip">${frameThumbs.join("")}</div>`
+      : "";
+    const audioUrl = `/api/history/audio/${encodeURIComponent(e.id)}`;
 
     card.innerHTML = `
       <div class="card-header">
-        <span class="person-id">${escapeHtml(e.person_id != null ? e.person_id : personId)}</span>
+        <span class="person-id">${escapeHtml(
+          e.person_id != null ? e.person_id : ""
+        )}</span>
+        <span class="timestamp">${escapeHtml(ts)}</span>
         ${confidenceHtml}
+      </div>
+      <div class="media-row">
+        ${framesHtml}
+        <audio class="history-audio" controls src="${audioUrl}"></audio>
       </div>
       <div class="primary-emotion emotion-${e.primary_emotion}">${primaryLabel}</div>
       <div class="secondary-emotion">次要情绪: ${secondaryLabel}</div>
@@ -229,8 +270,38 @@ function updateTrendChart(trends) {
 }
 
 // ── 初始化 ─────────────────────────────────────────────────
+async function sendPipelineCommand(action) {
+  const endpoint =
+    action === "start" ? "/api/pipeline/start" : "/api/pipeline/pause";
+  try {
+    const resp = await fetch(endpoint, { method: "POST" });
+    if (!resp.ok) {
+      console.error("控制流水线失败:", action, resp.status);
+      return;
+    }
+    if (action === "pause") {
+      historyFrozen = true;
+    } else if (action === "start") {
+      historyFrozen = false;
+    }
+  } catch (e) {
+    console.error("控制流水线异常:", e);
+  }
+}
+
+function bindControls() {
+  const btnStart = document.getElementById("btn-start");
+  const btnPause = document.getElementById("btn-pause");
+  if (btnStart) {
+    btnStart.addEventListener("click", () => sendPipelineCommand("start"));
+  }
+  if (btnPause) {
+    btnPause.addEventListener("click", () => sendPipelineCommand("pause"));
+  }
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   initChart();
   connectWebSocket();
+  bindControls();
 });

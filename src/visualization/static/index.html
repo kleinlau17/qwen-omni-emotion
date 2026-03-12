@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Qwen-Omni 情绪理解仪表盘</title>
-  <link rel="stylesheet" href="/static/style.css?v=2">
+  <link rel="stylesheet" href="/static/style.css?v=3">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -12,7 +12,7 @@
   <header id="status-bar">
     <div class="status-item">
       <span class="status-label">系统状态</span>
-      <span id="sys-status" class="status-value status-ok">运行中</span>
+      <span id="sys-status" class="status-value status-warn">未启动</span>
     </div>
     <div class="status-item">
       <span class="status-label">推理延迟</span>
@@ -34,6 +34,10 @@
       <span class="status-label">连接</span>
       <span id="ws-status" class="status-value status-warn">断开</span>
     </div>
+    <div class="status-actions">
+      <button id="btn-start" class="primary-btn">开始推理</button>
+      <button id="btn-pause" class="secondary-btn">暂停推理</button>
+    </div>
   </header>
 
   <!-- 主内容区 -->
@@ -46,9 +50,9 @@
       </div>
     </section>
 
-    <!-- 右侧：情绪卡片 -->
+    <!-- 右侧：情绪卡片（按推理轮次） -->
     <section id="emotion-panel">
-      <h2>情绪分析</h2>
+      <h2>推理历史</h2>
       <div id="emotion-cards">
         <div class="empty-hint">等待推理结果...</div>
       </div>
@@ -63,6 +67,6 @@
     </div>
   </section>
 
-  <script src="/static/app.js?v=2"></script>
+  <script src="/static/app.js?v=3"></script>
 </body>
 </html>

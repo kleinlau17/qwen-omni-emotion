@@ -161,13 +161,15 @@ def main() -> None:
 
     LOGGER.info("正在初始化管道组件 ...")
     pipeline = RealtimePipeline(config=config)
-    LOGGER.info("管道初始化完成，正在加载模型与启动采集 ...")
-    pipeline.start()
-
+    LOGGER.info("管道初始化完成")
     viz_config = config.get("visualization", {})
     web_enabled = bool(viz_config.get("enabled", True)) and not args.no_web
     if web_enabled:
         _start_web_server(pipeline, viz_config)
+        LOGGER.info("等待 Web 仪表盘控制端触发推理 (请在浏览器中点击“开始推理”)")
+    else:
+        LOGGER.info("未启用 Web 仪表盘，直接启动流水线")
+        pipeline.start()
 
     LOGGER.info("系统已就绪，按 Ctrl+C 退出")
 
