@@ -78,26 +78,20 @@ class AtmosphereResult:
 _EMOTION_RESULT_SCHEMA: dict[str, object] = {
     "type": "object",
     "additionalProperties": False,
+    # 精简版：仅约束 primary_emotion / secondary_emotion，其他字段在解析阶段由后端补齐，
+    # 以减少模型输出负担，同时保持内部数据结构兼容。
     "required": [
-        "person_id",
         "primary_emotion",
-        "emotion_intensity",
         "secondary_emotion",
-        "confidence",
-        "description",
     ],
     "properties": {
-        "person_id": {"type": "string", "minLength": 1},
         "primary_emotion": {"type": "string", "enum": VALID_EMOTIONS},
-        "emotion_intensity": {"type": "number", "minimum": 0.0, "maximum": 1.0},
         "secondary_emotion": {
             "anyOf": [
                 {"type": "string", "enum": VALID_EMOTIONS},
                 {"type": "null"},
             ]
         },
-        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-        "description": {"type": "string", "minLength": 1},
     },
 }
 
@@ -117,20 +111,14 @@ MULTI_PERSON_SCHEMA: str = json.dumps(
         "additionalProperties": False,
         "required": [
             "overall_mood",
-            "tension_level",
-            "engagement_level",
             "individual_emotions",
-            "description",
         ],
         "properties": {
             "overall_mood": {"type": "string", "minLength": 1},
-            "tension_level": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-            "engagement_level": {"type": "number", "minimum": 0.0, "maximum": 1.0},
             "individual_emotions": {
                 "type": "array",
                 "items": _EMOTION_RESULT_SCHEMA,
             },
-            "description": {"type": "string", "minLength": 1},
         },
     },
     indent=2,

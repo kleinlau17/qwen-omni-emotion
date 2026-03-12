@@ -20,10 +20,9 @@ def build_single_person_prompt() -> str:
         "请返回严格 JSON，输出字段必须与以下 JSON Schema 一致，不得缺失或增加字段：\n"
         f"{SINGLE_PERSON_SCHEMA}\n"
         "要求：\n"
-        "1) person_id 使用能标识该人物的字符串（例如 person_0 / person_1 / 主讲人 等）；\n"
-        "2) primary_emotion 必须来自 schema 枚举；\n"
-        "3) emotion_intensity 与 confidence 为 0.0-1.0 浮点数；\n"
-        "4) description 用一句自然语言概括你作出判断的主要依据，尽量引用你在表情、眼神或肢体细节上观察到的线索。"
+        "1) 只需给出 primary_emotion 与 secondary_emotion（可为 null）；\n"
+        "2) primary_emotion 必须来自 schema 中给出的枚举集合；\n"
+        "3) secondary_emotion 若存在，也必须来自同一枚举集合。"
     )
 
 

@@ -316,6 +316,8 @@ class RealtimePipeline:
                 )
 
                 for item, response in zip(batch_items, responses):
+                    raw_text = response if isinstance(response, str) else str(response)
+                    LOGGER.info("模型原始输出 (完整):\n%s", raw_text)
                     result = parse_emotion_response(response)
                     if result is None:
                         LOGGER.warning(
@@ -323,6 +325,11 @@ class RealtimePipeline:
                             item["window_serial"], item["person_idx"],
                         )
                         continue
+                    LOGGER.info(
+                        "解析结果: primary_emotion=%s secondary_emotion=%s",
+                        result.primary_emotion,
+                        result.secondary_emotion,
+                    )
                     normalized = EmotionResult(
                         person_id=f"person_{item['person_idx']}",
                         primary_emotion=result.primary_emotion,

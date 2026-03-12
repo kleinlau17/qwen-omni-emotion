@@ -51,17 +51,23 @@ def parse_emotion_response(raw_text: str) -> EmotionResult | None:
         return None
 
     try:
+        # 精简版 schema 只要求 primary_emotion / secondary_emotion，其余字段在这里补齐默认值，
+        # 以兼容下游使用完整 EmotionResult 的代码。
+        person_id = str(payload.get("person_id", "person_0"))
+        emotion_intensity_raw = payload.get("emotion_intensity", 0.5)
+        confidence_raw = payload.get("confidence", 0.5)
+        description_raw = payload.get("description", "no description")
         return EmotionResult(
-            person_id=str(payload["person_id"]),
+            person_id=person_id,
             primary_emotion=str(payload["primary_emotion"]),
-            emotion_intensity=float(payload["emotion_intensity"]),
+            emotion_intensity=float(emotion_intensity_raw),
             secondary_emotion=(
                 str(payload["secondary_emotion"])
                 if payload.get("secondary_emotion") is not None
                 else None
             ),
-            confidence=float(payload["confidence"]),
-            description=str(payload["description"]),
+            confidence=float(confidence_raw),
+            description=str(description_raw),
         )
     except (KeyError, TypeError, ValueError) as exc:
         LOGGER.warning("Invalid emotion payload: %s, raw: %s", exc, raw_text)
@@ -84,25 +90,27 @@ def parse_atmosphere_response(raw_text: str) -> AtmosphereResult | None:
         for item in individuals_raw:
             individuals.append(
                 EmotionResult(
-                    person_id=str(item["person_id"]),
+                    # 精简版 schema 只强制 primary_emotion / secondary_emotion，
+                    # 其余字段在此补默认值，兼容旧数据。
+                    person_id=str(item.get("person_id", "person_0")),
                     primary_emotion=str(item["primary_emotion"]),
-                    emotion_intensity=float(item["emotion_intensity"]),
+                    emotion_intensity=float(item.get("emotion_intensity", 0.5)),
                     secondary_emotion=(
                         str(item["secondary_emotion"])
                         if item.get("secondary_emotion") is not None
                         else None
                     ),
-                    confidence=float(item["confidence"]),
-                    description=str(item["description"]),
+                    confidence=float(item.get("confidence", 0.5)),
+                    description=str(item.get("description", "no description")),
                 )
             )
 
         return AtmosphereResult(
             overall_mood=str(payload["overall_mood"]),
-            tension_level=float(payload["tension_level"]),
-            engagement_level=float(payload["engagement_level"]),
+            tension_level=float(payload.get("tension_level", 0.5)),
+            engagement_level=float(payload.get("engagement_level", 0.5)),
             individual_emotions=individuals,
-            description=str(payload["description"]),
+            description=str(payload.get("description", "no description")),
         )
     except (KeyError, TypeError, ValueError) as exc:
         LOGGER.warning("Invalid atmosphere payload: %s, raw: %s", exc, raw_text)

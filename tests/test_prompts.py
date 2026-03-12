@@ -91,7 +91,8 @@ def test_build_task_prompts_contain_schema() -> None:
     """任务 prompt 应包含 schema 片段。"""
     single = build_single_person_prompt()
     multi = build_multi_person_prompt(person_count=3)
-    assert '"person_id"' in single
+    # 精简版 schema 仅约束 primary_emotion / secondary_emotion
+    assert '"primary_emotion"' in single
     assert '"individual_emotions"' in multi
 
 
