@@ -11,24 +11,28 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 # ── 模拟各种长度的真实输出 ──
 
 samples = {
-    "最短输出 (null secondary)": json.dumps({
-        "primary_emotion": "neutral",
-        "secondary_emotion": None,
+    "最短输出": json.dumps({
+        "detected_emotion": "neutral",
+        "self_emotion": "neutral",
+        "action": "scan_01",
     }, ensure_ascii=False),
 
-    "典型输出 (有 secondary)": json.dumps({
-        "primary_emotion": "happy",
-        "secondary_emotion": "surprised",
+    "典型输出": json.dumps({
+        "detected_emotion": "happy",
+        "self_emotion": "surprised",
+        "action": "curious",
     }, ensure_ascii=False),
 
     "模型可能带前缀的情况": '```json\n' + json.dumps({
-        "primary_emotion": "happy",
-        "secondary_emotion": None,
+        "detected_emotion": "happy",
+        "self_emotion": "neutral",
+        "action": "scan_01",
     }, ensure_ascii=False) + '\n```',
 
     "带缩进的 JSON (模型有时会格式化)": json.dumps({
-        "primary_emotion": "surprised",
-        "secondary_emotion": "happy",
+        "detected_emotion": "surprised",
+        "self_emotion": "happy",
+        "action": "laugh_big",
     }, indent=2, ensure_ascii=False),
 }
 
@@ -61,7 +65,7 @@ print()
 print("─" * 70)
 print("截断风险测试 (典型输出在不同 token 限制下是否仍为合法 JSON):")
 print("─" * 70)
-typical = samples["典型输出 (有 secondary)"]
+typical = samples["典型输出"]
 token_ids = tokenizer.encode(typical, add_special_tokens=False)
 full_len = len(token_ids)
 

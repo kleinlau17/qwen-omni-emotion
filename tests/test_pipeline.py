@@ -116,7 +116,7 @@ class _FakeModel:
     def infer(self, conversation: list[dict[str, Any]], use_audio_in_video: bool = True) -> str:
         del conversation, use_audio_in_video
         self.infer_called += 1
-        return '{"primary_emotion":"happy","secondary_emotion":"neutral"}'
+        return '{"detected_emotion":"happy","self_emotion":"neutral","action":"scan_01"}'
 
 
 class _FakeTracker:
@@ -192,7 +192,7 @@ def test_pipeline_orchestration_updates_state(monkeypatch: Any) -> None:
     assert len(pipeline.tracker.updated) >= 1
     current_state = pipeline.get_current_state()
     assert "person_0" in current_state
-    assert current_state["person_0"]["primary_emotion"] == "happy"
+    assert current_state["person_0"]["detected_emotion"] == "happy"
 
 
 def test_load_merged_config(tmp_path: Any) -> None:

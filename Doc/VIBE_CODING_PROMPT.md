@@ -128,11 +128,9 @@ tests/                # test_*.py 对应每个模块
 @dataclass
 class EmotionResult:
     person_id: str               # 人物标识
-    primary_emotion: str         # 主要情绪 (happy/sad/angry/fearful/surprised/disgusted/neutral/contemptuous)
-    emotion_intensity: float     # 强度 0.0-1.0
-    secondary_emotion: str | None  # 次要情绪
-    confidence: float            # 模型信心 0.0-1.0
-    description: str             # 自然语言描述
+    detected_emotion: str        # 识别出的对象情绪 (happy/sad/angry/fearful/surprised/disgusted/neutral/contemptuous)
+    self_emotion: str            # BDX 自身情绪
+    action: str                  # 交互动作（来自动作资产库）
 
 @dataclass
 class AtmosphereResult:
@@ -140,19 +138,19 @@ class AtmosphereResult:
     tension_level: float         # 紧张度 0.0-1.0
     engagement_level: float      # 参与度 0.0-1.0
     individual_emotions: list[EmotionResult]
-    description: str
 
 同时提供:
 - SINGLE_PERSON_SCHEMA: str — 单人分析的 JSON Schema 文本（嵌入 prompt）
 - MULTI_PERSON_SCHEMA: str — 多人分析的 JSON Schema 文本
 - VALID_EMOTIONS: list[str] — 合法情绪标签列表
+- VALID_ACTIONS: list[str] — 合法动作名称列表（来自动作资产库）
 
 ### Step 2: src/prompts/system_prompt.py
 
 定义模型的系统角色设定:
 - build_system_prompt() → dict
 - 返回 {"role": "system", "content": [{"type": "text", "text": ...}]}
-- 角色: 多模态情绪分析专家
+- 角色: 多模态情绪理解与互动决策专家 + BDX 角色设定
 - 约束: 只输出 JSON，不输出其他文字；分析维度包括面部表情、肢体语言、语音语调
 - 不要用 Qwen 官方音频输出的 system prompt，本项目只需文本输出
 
@@ -186,7 +184,7 @@ class EmotionStateTracker:
 
 - 内部用 dict[str, deque[tuple[EmotionResult, float]]] 存储历史
 - deque 限制长度（如 maxlen=20）防止内存膨胀
-- detect_change: 比较最近两次情绪的 intensity 差异是否超过阈值
+- detect_change: 比较最近两次 detected_emotion 是否发生变化
 
 ### Step 6: 测试
 

@@ -47,7 +47,7 @@ class EmotionStateTracker:
                 return False
             latest = person_history[-1][0]
             previous = person_history[-2][0]
-            return latest.primary_emotion != previous.primary_emotion
+            return latest.detected_emotion != previous.detected_emotion
 
     def get_current_state(self, person_id: str) -> EmotionResult | None:
         """获取人物当前最新情绪状态。"""

@@ -46,7 +46,7 @@ def build_conversation(frames: list[Image.Image]) -> list[dict[str, Any]]:
         {
             "role": "system",
             "content": [{"type": "text", "text": (
-                "你是一位多模态情绪分析专家。"
+                "你是一位多模态情绪理解与互动决策专家。"
                 "请严格遵循任务指令中的 JSON Schema 输出，仅返回一个合法 JSON 对象。"
             )}],
         },
@@ -55,8 +55,8 @@ def build_conversation(frames: list[Image.Image]) -> list[dict[str, Any]]:
             "content": [
                 {"type": "video", "video": frames},
                 {"type": "text", "text": (
-                    "请对当前单人场景进行情绪分析，并返回严格 JSON。"
-                    '{"primary_emotion":"happy","secondary_emotion":null}'
+                    "请对当前单人场景进行情绪识别与互动决策，并返回严格 JSON。"
+                    '{"detected_emotion":"happy","self_emotion":"neutral","action":"scan_01"}'
                 )},
             ],
         },

@@ -107,10 +107,8 @@ function updateEmotionCards(history) {
     const hasConfidence = typeof e.confidence === "number";
     const intensityPct = hasIntensity ? Math.round(e.emotion_intensity * 100) : null;
     const confidencePct = hasConfidence ? Math.round(e.confidence * 100) : null;
-    const primaryLabel = EMOTION_LABELS[e.primary_emotion] || e.primary_emotion;
-    const secondaryLabel = e.secondary_emotion
-      ? (EMOTION_LABELS[e.secondary_emotion] || e.secondary_emotion)
-      : "无";
+    const detectedLabel = EMOTION_LABELS[e.detected_emotion] || e.detected_emotion;
+    const selfLabel = EMOTION_LABELS[e.self_emotion] || e.self_emotion;
 
     const confidenceHtml = confidencePct != null
       ? `<span class="confidence-badge">置信度 ${confidencePct}%</span>`
@@ -119,7 +117,7 @@ function updateEmotionCards(history) {
       ? `<div class="intensity-bar-container">
           <span class="intensity-label">${intensityPct}%</span>
           <div class="intensity-bar-bg">
-            <div class="intensity-bar-fill bar-${e.primary_emotion}"
+            <div class="intensity-bar-fill bar-${e.detected_emotion}"
                  style="width: ${intensityPct}%"></div>
           </div>
         </div>`
@@ -160,8 +158,9 @@ function updateEmotionCards(history) {
         ${framesHtml}
         <audio class="history-audio" controls src="${audioUrl}"></audio>
       </div>
-      <div class="primary-emotion emotion-${e.primary_emotion}">${primaryLabel}</div>
-      <div class="secondary-emotion">次要情绪: ${secondaryLabel}</div>
+      <div class="primary-emotion emotion-${e.detected_emotion}">识别情绪: ${detectedLabel}</div>
+      <div class="secondary-emotion">自身情绪: ${selfLabel}</div>
+      <div class="secondary-emotion">交互动作: ${escapeHtml(e.action || "")}</div>
       ${intensityHtml}
       ${descriptionHtml}
     `;
@@ -235,7 +234,7 @@ function updateTrendChart(trends) {
         trendHistory[personId].push({
           time: now,
           intensity: latest.emotion_intensity,
-          emotion: latest.primary_emotion
+          emotion: latest.detected_emotion
         });
         if (trendHistory[personId].length > MAX_TREND_POINTS) {
           trendHistory[personId].shift();

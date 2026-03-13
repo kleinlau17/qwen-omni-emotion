@@ -53,12 +53,9 @@ def parse_emotion_response(raw_text: str) -> EmotionResult | None:
     try:
         return EmotionResult(
             person_id="person_0",
-            primary_emotion=str(payload["primary_emotion"]),
-            secondary_emotion=(
-                str(payload["secondary_emotion"])
-                if payload.get("secondary_emotion") is not None
-                else None
-            ),
+            detected_emotion=str(payload["detected_emotion"]),
+            self_emotion=str(payload["self_emotion"]),
+            action=str(payload["action"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
         LOGGER.warning("Invalid emotion payload: %s, raw: %s", exc, raw_text)
@@ -82,12 +79,9 @@ def parse_atmosphere_response(raw_text: str) -> AtmosphereResult | None:
             individuals.append(
                 EmotionResult(
                     person_id=f"person_{idx}",
-                    primary_emotion=str(item["primary_emotion"]),
-                    secondary_emotion=(
-                        str(item["secondary_emotion"])
-                        if item.get("secondary_emotion") is not None
-                        else None
-                    ),
+                    detected_emotion=str(item["detected_emotion"]),
+                    self_emotion=str(item["self_emotion"]),
+                    action=str(item["action"]),
                 )
             )
 

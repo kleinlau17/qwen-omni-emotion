@@ -5,11 +5,24 @@ capture:
     resolution: [1920, 1080]       # 1080p
     fps: 30
     color_format: "RGB"
-    backend: "avfoundation"
+    backend: "rtsp"
+    rtsp_url: "rtsp://192.168.1.141:8554/test"
+    rtsp_transport: "udp"          # udp / tcp
+    ffmpeg_path: "ffmpeg"
+    ffmpeg_extra_args: []          # 传给 ffmpeg 的额外参数列表
+    ffmpeg_probe_size: 1000000     # 探测大小，过小可能导致无视频
+    ffmpeg_analyze_duration: 1000000  # 探测时长 (us)
   audio:
     sample_rate: 16000             # 16kHz
     channels: 1                    # 单声道
     chunk_duration_ms: 100         # 每个音频块时长
+    backend: "rtsp"                # 使用 RTSP 音频
+    rtsp_url: "rtsp://192.168.1.141:8554/test"
+    rtsp_transport: "udp"
+    ffmpeg_path: "ffmpeg"
+    ffmpeg_extra_args: []
+    ffmpeg_probe_size: 1000000
+    ffmpeg_analyze_duration: 1000000
 
 preprocessing:
   frame_sampling:
@@ -23,5 +36,5 @@ preprocessing:
     padding_ratio: 0.2             # ROI 边界扩展比例
 
 stream_buffer:
-  window_duration_seconds: 1.5     # 缓冲窗口时长
+  window_duration_seconds: 2     # 缓冲窗口时长
   max_windows_in_buffer: 6        # 最大缓冲窗口数（≥ batch_size+2，允许推理期间积累）

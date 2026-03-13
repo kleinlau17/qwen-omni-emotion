@@ -12,6 +12,7 @@ from src.prompts.output_schema import (
     EmotionResult,
     MULTI_PERSON_SCHEMA,
     SINGLE_PERSON_SCHEMA,
+    VALID_ACTIONS,
     VALID_EMOTIONS,
 )
 from src.prompts.system_prompt import build_system_prompt
@@ -26,20 +27,22 @@ def test_emotion_result_creation_success() -> None:
     """应能创建合法 EmotionResult（简化版）。"""
     result = EmotionResult(
         person_id="person_0",
-        primary_emotion="happy",
-        secondary_emotion="neutral",
+        detected_emotion="happy",
+        self_emotion="neutral",
+        action=VALID_ACTIONS[0],
     )
-    assert result.primary_emotion in VALID_EMOTIONS
-    assert result.secondary_emotion == "neutral"
+    assert result.detected_emotion in VALID_EMOTIONS
+    assert result.self_emotion == "neutral"
 
 
 def test_emotion_result_invalid_emotion_raises() -> None:
-    """primary_emotion 非法时应抛出 ValueError。"""
+    """detected_emotion 非法时应抛出 ValueError。"""
     with pytest.raises(ValueError):
         EmotionResult(
             person_id="person_0",
-            primary_emotion="invalid_emotion",
-            secondary_emotion=None,
+            detected_emotion="invalid_emotion",
+            self_emotion="neutral",
+            action=VALID_ACTIONS[0],
         )
 
 
@@ -47,8 +50,9 @@ def test_atmosphere_result_creation_success() -> None:
     """应能创建合法 AtmosphereResult。"""
     item = EmotionResult(
         person_id="person_1",
-        primary_emotion="neutral",
-        secondary_emotion=None,
+        detected_emotion="neutral",
+        self_emotion="happy",
+        action=VALID_ACTIONS[0],
     )
     result = AtmosphereResult(
         overall_mood="focused",
@@ -80,7 +84,7 @@ def test_build_task_prompts_contain_schema() -> None:
     """任务 prompt 应包含 schema 片段。"""
     single = build_single_person_prompt()
     multi = build_multi_person_prompt(person_count=3)
-    assert '"primary_emotion"' in single
+    assert '"detected_emotion"' in single
     assert '"individual_emotions"' in multi
 
 

@@ -26,6 +26,7 @@ import numpy as np
 from PIL import Image
 
 from src.capture.audio_capture import AudioCapture
+from src.capture.rtsp_capture import RTSPAudioCapture, RTSPOptions, RTSPVideoCapture
 from src.capture.stream_buffer import StreamBuffer
 from src.capture.video_capture import VideoCapture
 from src.model.qwen_omni import QwenOmniModel
@@ -70,16 +71,22 @@ class RealtimePipeline:
         video_resolution_raw = video_cfg.get("resolution", [1920, 1080])
         video_resolution = tuple(int(v) for v in video_resolution_raw)
 
-        LOGGER.info("  [2/6] 初始化视频采集 (VideoCapture %dx%d@%dfps) ...",
-                    video_resolution[0], video_resolution[1], int(video_cfg.get("fps", 30)))
-        self.video_capture = VideoCapture(
+        video_backend = str(video_cfg.get("backend", "avfoundation")).lower()
+        LOGGER.info("  [2/6] 初始化视频采集 (%s %dx%d@%dfps) ...",
+                    video_backend, video_resolution[0], video_resolution[1], int(video_cfg.get("fps", 30)))
+        self.video_capture = self._build_video_capture(
+            video_backend=video_backend,
+            video_cfg=video_cfg,
             resolution=(video_resolution[0], video_resolution[1]),
-            fps=int(video_cfg.get("fps", 30)),
         )
         audio_sample_rate = int(audio_cfg.get("sample_rate", 16000))
         audio_channels = int(audio_cfg.get("channels", 1))
-        LOGGER.info("  [3/6] 初始化音频采集 (AudioCapture %dHz) ...", audio_sample_rate)
-        self.audio_capture = AudioCapture(
+        audio_backend = str(audio_cfg.get("backend", video_backend)).lower()
+        LOGGER.info("  [3/6] 初始化音频采集 (%s %dHz) ...", audio_backend, audio_sample_rate)
+        self.audio_capture = self._build_audio_capture(
+            audio_backend=audio_backend,
+            audio_cfg=audio_cfg,
+            video_cfg=video_cfg,
             sample_rate=audio_sample_rate,
             channels=audio_channels,
         )
@@ -162,6 +169,81 @@ class RealtimePipeline:
 
         self._audio_sample_rate: int = audio_sample_rate
         self._audio_channels: int = audio_channels
+        self._video_backend = video_backend
+        self._audio_backend = audio_backend
+
+    def _build_video_capture(
+        self,
+        video_backend: str,
+        video_cfg: dict[str, Any],
+        resolution: tuple[int, int],
+    ) -> VideoCapture | RTSPVideoCapture:
+        if video_backend in {"rtsp", "ffmpeg"}:
+            options = self._build_rtsp_options(video_cfg, {})
+            return RTSPVideoCapture(
+                options=options,
+                resolution=resolution,
+                fps=int(video_cfg.get("fps", 30)),
+            )
+        return VideoCapture(
+            resolution=resolution,
+            fps=int(video_cfg.get("fps", 30)),
+        )
+
+    def _build_audio_capture(
+        self,
+        audio_backend: str,
+        audio_cfg: dict[str, Any],
+        video_cfg: dict[str, Any],
+        sample_rate: int,
+        channels: int,
+    ) -> AudioCapture | RTSPAudioCapture | None:
+        if audio_backend in {"none", "disabled"}:
+            return None
+        if audio_backend in {"rtsp", "ffmpeg"}:
+            options = self._build_rtsp_options(video_cfg, audio_cfg)
+            return RTSPAudioCapture(
+                options=options,
+                sample_rate=sample_rate,
+                channels=channels,
+                chunk_duration_ms=int(audio_cfg.get("chunk_duration_ms", 100)),
+            )
+        return AudioCapture(sample_rate=sample_rate, channels=channels)
+
+    def _build_rtsp_options(
+        self,
+        video_cfg: dict[str, Any],
+        audio_cfg: dict[str, Any],
+    ) -> RTSPOptions:
+        url = str(audio_cfg.get("rtsp_url") or video_cfg.get("rtsp_url") or "").strip()
+        if not url:
+            raise RuntimeError("RTSP backend 需要配置 capture.video.rtsp_url 或 capture.audio.rtsp_url")
+        rtsp_transport = str(
+            audio_cfg.get("rtsp_transport") or video_cfg.get("rtsp_transport") or "udp"
+        ).lower()
+        ffmpeg_path = str(
+            audio_cfg.get("ffmpeg_path") or video_cfg.get("ffmpeg_path") or "ffmpeg"
+        )
+        extra_args = audio_cfg.get("ffmpeg_extra_args") or video_cfg.get("ffmpeg_extra_args")
+        if extra_args is not None and not isinstance(extra_args, list):
+            raise RuntimeError("ffmpeg_extra_args 需为字符串列表")
+        probe_size = audio_cfg.get("ffmpeg_probe_size", video_cfg.get("ffmpeg_probe_size"))
+        analyze_duration = audio_cfg.get(
+            "ffmpeg_analyze_duration",
+            video_cfg.get("ffmpeg_analyze_duration"),
+        )
+        if probe_size is None:
+            probe_size = 1000000
+        if analyze_duration is None:
+            analyze_duration = 1000000
+        return RTSPOptions(
+            url=url,
+            rtsp_transport=rtsp_transport,
+            ffmpeg_path=ffmpeg_path,
+            extra_args=extra_args,
+            probe_size=probe_size,
+            analyze_duration=analyze_duration,
+        )
 
     def start(self) -> None:
         """加载模型并启动采集与双线程流水线。"""
@@ -175,7 +257,8 @@ class RealtimePipeline:
 
         LOGGER.info("正在启动视频采集 ...")
         self.video_capture.set_frame_callback(self._on_frame)
-        self.audio_capture.set_audio_callback(self._on_audio)
+        if self.audio_capture is not None:
+            self.audio_capture.set_audio_callback(self._on_audio)
 
         try:
             self.video_capture.start()
@@ -183,11 +266,12 @@ class RealtimePipeline:
         except Exception:
             LOGGER.exception("启动视频采集失败，进入降级模式（仅音频）")
 
-        try:
-            self.audio_capture.start()
-            LOGGER.info("音频采集已启动")
-        except Exception:
-            LOGGER.exception("启动音频采集失败，进入降级模式（仅视频）")
+        if self.audio_capture is not None:
+            try:
+                self.audio_capture.start()
+                LOGGER.info("音频采集已启动")
+            except Exception:
+                LOGGER.exception("启动音频采集失败，进入降级模式（仅视频）")
 
         self._prep_thread = Thread(
             target=self._prep_loop,
@@ -225,10 +309,11 @@ class RealtimePipeline:
         except Exception:
             LOGGER.exception("停止视频采集失败")
 
-        try:
-            self.audio_capture.stop()
-        except Exception:
-            LOGGER.exception("停止音频采集失败")
+        if self.audio_capture is not None:
+            try:
+                self.audio_capture.stop()
+            except Exception:
+                LOGGER.exception("停止音频采集失败")
 
         LOGGER.info("RealtimePipeline 已停止")
 
@@ -353,14 +438,16 @@ class RealtimePipeline:
                         )
                         continue
                     LOGGER.info(
-                        "解析结果: primary_emotion=%s secondary_emotion=%s",
-                        result.primary_emotion,
-                        result.secondary_emotion,
+                        "解析结果: detected_emotion=%s self_emotion=%s action=%s",
+                        result.detected_emotion,
+                        result.self_emotion,
+                        result.action,
                     )
                     normalized = EmotionResult(
                         person_id=f"person_{item['person_idx']}",
-                        primary_emotion=result.primary_emotion,
-                        secondary_emotion=result.secondary_emotion,
+                        detected_emotion=result.detected_emotion,
+                        self_emotion=result.self_emotion,
+                        action=result.action,
                     )
                     self.tracker.update(normalized, timestamp=item["end_ts"])
                     with self._state_lock:
@@ -429,8 +516,9 @@ class RealtimePipeline:
                 {
                     "id": item_id,
                     "person_id": result.person_id,
-                    "primary_emotion": result.primary_emotion,
-                    "secondary_emotion": result.secondary_emotion,
+                    "detected_emotion": result.detected_emotion,
+                    "self_emotion": result.self_emotion,
+                    "action": result.action,
                     "emotion_intensity": None,
                     "confidence": None,
                     "description": None,
@@ -450,8 +538,9 @@ class RealtimePipeline:
             return {
                 person_id: {
                     "person_id": item.person_id,
-                    "primary_emotion": item.primary_emotion,
-                    "secondary_emotion": item.secondary_emotion,
+                    "detected_emotion": item.detected_emotion,
+                    "self_emotion": item.self_emotion,
+                    "action": item.action,
                     "emotion_intensity": None,
                     "confidence": None,
                     "description": None,
@@ -502,7 +591,7 @@ class RealtimePipeline:
             results = self.tracker.get_trend(person_id, window_count=window_count)
             trends[person_id] = [
                 {
-                    "primary_emotion": r.primary_emotion,
+                    "detected_emotion": r.detected_emotion,
                     "emotion_intensity": None,
                     "confidence": None,
                 }
@@ -518,8 +607,9 @@ class RealtimePipeline:
             {
                 "id": item["id"],
                 "person_id": item["person_id"],
-                "primary_emotion": item["primary_emotion"],
-                "secondary_emotion": item["secondary_emotion"],
+                "detected_emotion": item["detected_emotion"],
+                "self_emotion": item["self_emotion"],
+                "action": item["action"],
                 "emotion_intensity": item["emotion_intensity"],
                 "confidence": item["confidence"],
                 "description": item["description"],

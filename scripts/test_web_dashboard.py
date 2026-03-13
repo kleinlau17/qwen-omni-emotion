@@ -12,7 +12,7 @@ import numpy as np
 
 sys.path.insert(0, ".")
 
-from src.prompts.output_schema import VALID_EMOTIONS, EmotionResult
+from src.prompts.output_schema import VALID_ACTIONS, VALID_EMOTIONS, EmotionResult
 
 
 class MockPipeline:
@@ -52,8 +52,9 @@ class MockPipeline:
                 emotion = random.choice(VALID_EMOTIONS)
                 result = EmotionResult(
                     person_id=pid,
-                    primary_emotion=emotion,
-                    secondary_emotion=random.choice([None, random.choice(VALID_EMOTIONS)]),
+                    detected_emotion=emotion,
+                    self_emotion=random.choice(VALID_EMOTIONS),
+                    action=random.choice(VALID_ACTIONS),
                 )
                 self._emotions[pid] = result
                 if pid not in self._trends:
@@ -67,8 +68,9 @@ class MockPipeline:
         return {
             pid: {
                 "person_id": r.person_id,
-                "primary_emotion": r.primary_emotion,
-                "secondary_emotion": r.secondary_emotion,
+                "detected_emotion": r.detected_emotion,
+                "self_emotion": r.self_emotion,
+                "action": r.action,
                 "emotion_intensity": None,
                 "confidence": None,
                 "description": None,
@@ -102,7 +104,7 @@ class MockPipeline:
             items = list(history)[-window_count:]
             trends[pid] = [
                 {
-                    "primary_emotion": r.primary_emotion,
+                    "detected_emotion": r.detected_emotion,
                     "emotion_intensity": None,
                     "confidence": None,
                 }
