@@ -8,8 +8,8 @@ performance:
   latency_budget_ms:
     single_person: 400             # 单人端到端延迟上限
     multi_person: 500              # 多人(4-6人)延迟上限
-  inference_window_seconds: 1.5    # 推理窗口时长
-  inference_interval_seconds: 3.0  # 推理触发间隔（窗口可重叠）
+  inference_window_seconds: 2    # 推理窗口时长
+  inference_interval_seconds: 2.0  # 推理触发间隔（窗口可重叠）
   buffer_pool_size: 8              # 帧缓冲池大小
   batch_size: 1                    # 推理批大小（1=逐窗口即时显示，2+=攒批后一起推理，吞吐更高但刷新更慢）
 

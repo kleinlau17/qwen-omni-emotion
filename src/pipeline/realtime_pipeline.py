@@ -326,7 +326,6 @@ class RealtimePipeline:
         若干已就绪的 item 等待 InferThread 消费。
         """
         system_prompt = build_system_prompt()
-        task_prompt = build_single_person_prompt()
         target_w, target_h = self._inference_resolution
         window_serial: int = 0
 
@@ -360,6 +359,17 @@ class RealtimePipeline:
                 person_frames = self._prepare_person_inputs(sampled_frames)
 
                 for person_idx, frames in enumerate(person_frames):
+                    last_action = None
+                    try:
+                        last_state = self.tracker.get_current_state(
+                            f"person_{person_idx}"
+                        )
+                        if last_state is not None:
+                            last_action = last_state.action
+                    except Exception:
+                        last_action = None
+
+                    task_prompt = build_single_person_prompt(last_action=last_action)
                     resized = [
                         Image.fromarray(f).resize(
                             (target_w, target_h), Image.LANCZOS,
