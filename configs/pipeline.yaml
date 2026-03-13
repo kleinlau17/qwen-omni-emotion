@@ -36,5 +36,5 @@ preprocessing:
     padding_ratio: 0.2             # ROI 边界扩展比例
 
 stream_buffer:
-  window_duration_seconds: 10     # 缓冲窗口时长
+  window_duration_seconds: 2     # 缓冲窗口时长
   max_windows_in_buffer: 6        # 最大缓冲窗口数（≥ batch_size+2，允许推理期间积累）

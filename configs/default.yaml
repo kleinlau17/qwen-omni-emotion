@@ -13,6 +13,18 @@ performance:
   buffer_pool_size: 8              # 帧缓冲池大小
   batch_size: 1                    # 推理批大小（1=逐窗口即时显示，2+=攒批后一起推理，吞吐更高但刷新更慢）
 
+# 机器人动作发送（模型输出 → 调度 → 发送）
+robot:
+  enabled: true                  # 是否启用动作发送
+  host: "192.168.1.102"           # 机器人 UDP 目标 IP
+  port: 5205                      # 机器人 UDP 端口
+  debug_print: true              # 是否打印发送的 JSON 命令
+
+# 动作调度层（模型输出后、发送前的策略，可扩展）
+action_scheduler:
+  pass_through: false             # 透传模式：true=每次推理直接下发，false=启用节流
+  send_interval_seconds: 0      # 节流间隔：至少间隔多少秒才发送一次动作给机器人
+
 visualization:
   enabled: true                    # 是否启用 Web 可视化仪表盘
   host: "127.0.0.1"               # 绑定地址（仅本地访问，隐私保护）

@@ -41,6 +41,37 @@ from src.understanding.state_tracker import EmotionStateTracker
 LOGGER = logging.getLogger(__name__)
 
 
+def _try_init_robot_and_scheduler(config: dict[str, Any]) -> tuple[bool, Any]:
+    """按配置初始化机器人发送器与动作调度器。
+
+    Returns:
+        (robot_enabled: bool, action_scheduler: ActionScheduler | None)
+    """
+    robot_cfg = config.get("robot", {})
+    scheduler_cfg = config.get("action_scheduler", {})
+    enabled = bool(robot_cfg.get("enabled", False))
+
+    scheduler = None
+    if robot_cfg or scheduler_cfg:
+        from src.robot.action_scheduler import ActionScheduler
+        scheduler = ActionScheduler(config=scheduler_cfg)
+
+    if enabled:
+        host = str(robot_cfg.get("host", "192.168.1.102"))
+        port = int(robot_cfg.get("port", 5205))
+        debug = bool(robot_cfg.get("debug_print", False))
+        try:
+            from src.robot.animation_action import init_sender, set_debug_print
+            init_sender(host, port)
+            set_debug_print(debug)
+            LOGGER.info("机器人动作发送已启用: %s:%d", host, port)
+        except Exception:
+            LOGGER.exception("初始化机器人发送器失败，将不发送动作")
+            enabled = False
+
+    return enabled, scheduler
+
+
 class RealtimePipeline:
     """实时情绪理解主管道。"""
 
@@ -120,9 +151,12 @@ class RealtimePipeline:
             min_pixels=int(infer_cfg.get("min_pixels", 128 * 28 * 28)),
             max_pixels=int(infer_cfg.get("max_pixels", 256 * 28 * 28)),
         )
-        LOGGER.info("  [6/6] 初始化状态追踪器 (EmotionStateTracker) ...")
+        LOGGER.info("  [6/6] 初始化状态追踪器与动作调度 ...")
         self.tracker = EmotionStateTracker(
             max_history=int(understanding_cfg.get("max_history", 20))
+        )
+        self._robot_enabled, self._action_scheduler = _try_init_robot_and_scheduler(
+            config
         )
 
         self._use_audio_in_video: bool = bool(infer_cfg.get("use_audio_in_video", True))
@@ -315,6 +349,13 @@ class RealtimePipeline:
             except Exception:
                 LOGGER.exception("停止音频采集失败")
 
+        if self._robot_enabled:
+            try:
+                from src.robot.animation_action import close_sender
+                close_sender()
+            except Exception:
+                LOGGER.exception("关闭机器人发送器失败")
+
         LOGGER.info("RealtimePipeline 已停止")
 
     # ── 流水线阶段 1: 预处理线程 ──────────────────────────────────
@@ -468,6 +509,15 @@ class RealtimePipeline:
                         audio=item["audio"],
                         frames=item.get("frames", []),
                     )
+                    # 模型输出 → 调度 → 机器人发送
+                    if self._action_scheduler is not None:
+                        actions = self._action_scheduler.submit(
+                            normalized, timestamp=item["end_ts"]
+                        )
+                        if self._robot_enabled and actions:
+                            from src.robot.animation_action import send_animation
+                            for action in actions:
+                                send_animation(action, print_json=False)
 
                 infer_ms = (perf_counter() - infer_start) * 1000.0
                 total_items = len(batch_items)
