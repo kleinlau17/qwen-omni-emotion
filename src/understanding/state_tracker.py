@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import deque
 from threading import Lock
 
-from src.prompts.output_schema import AtmosphereResult, EmotionResult
+from src.prompts.output_schema import EmotionResult
 
 
 class EmotionStateTracker:
@@ -18,14 +18,10 @@ class EmotionStateTracker:
         self._history: dict[str, deque[tuple[EmotionResult, float]]] = {}
         self._lock = Lock()
 
-    def update(self, result: EmotionResult | AtmosphereResult, timestamp: float) -> None:
+    def update(self, result: EmotionResult, timestamp: float) -> None:
         """写入一次新的推理结果。"""
         with self._lock:
-            if isinstance(result, EmotionResult):
-                self._append_result(result, timestamp)
-                return
-            for emotion in result.individual_emotions:
-                self._append_result(emotion, timestamp)
+            self._append_result(result, timestamp)
 
     def get_trend(self, person_id: str, window_count: int = 5) -> list[EmotionResult]:
         """获取指定人物最近 N 次情绪结果。"""

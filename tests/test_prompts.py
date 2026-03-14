@@ -8,9 +8,7 @@ import pytest
 from PIL import Image
 
 from src.prompts.output_schema import (
-    AtmosphereResult,
     EmotionResult,
-    MULTI_PERSON_SCHEMA,
     SINGLE_PERSON_SCHEMA,
     VALID_ACTIONS,
     VALID_EMOTIONS,
@@ -18,21 +16,18 @@ from src.prompts.output_schema import (
 from src.prompts.system_prompt import build_system_prompt
 from src.prompts.task_prompts import (
     build_conversation,
-    build_multi_person_prompt,
     build_single_person_prompt,
 )
 
 
 def test_emotion_result_creation_success() -> None:
-    """应能创建合法 EmotionResult（简化版）。"""
+    """应能创建合法 EmotionResult。"""
     result = EmotionResult(
         person_id="person_0",
         detected_emotion="happy",
-        self_emotion="neutral",
         action=VALID_ACTIONS[0],
     )
     assert result.detected_emotion in VALID_EMOTIONS
-    assert result.self_emotion == "neutral"
 
 
 def test_emotion_result_invalid_emotion_raises() -> None:
@@ -41,35 +36,16 @@ def test_emotion_result_invalid_emotion_raises() -> None:
         EmotionResult(
             person_id="person_0",
             detected_emotion="invalid_emotion",
-            self_emotion="neutral",
             action=VALID_ACTIONS[0],
         )
-
-
-def test_atmosphere_result_creation_success() -> None:
-    """应能创建合法 AtmosphereResult。"""
-    item = EmotionResult(
-        person_id="person_1",
-        detected_emotion="neutral",
-        self_emotion="happy",
-        action=VALID_ACTIONS[0],
-    )
-    result = AtmosphereResult(
-        overall_mood="focused",
-        tension_level=0.3,
-        engagement_level=0.75,
-        individual_emotions=[item],
-    )
-    assert result.individual_emotions[0].person_id == "person_1"
 
 
 def test_schema_strings_are_valid_json() -> None:
     """Schema 文本应是可解析 JSON。"""
     single_schema = json.loads(SINGLE_PERSON_SCHEMA)
-    multi_schema = json.loads(MULTI_PERSON_SCHEMA)
     assert single_schema["type"] == "object"
-    assert multi_schema["type"] == "object"
-    assert "individual_emotions" in multi_schema["properties"]
+    assert "action" in single_schema["properties"]
+    assert "reason" in single_schema["properties"]
 
 
 def test_build_system_prompt_format() -> None:
@@ -80,12 +56,19 @@ def test_build_system_prompt_format() -> None:
     assert prompt["content"][0]["type"] == "text"
 
 
-def test_build_task_prompts_contain_schema() -> None:
-    """任务 prompt 应包含 schema 片段。"""
+def test_build_task_prompts_contain_key_elements() -> None:
+    """system prompt 含动作库；单人 prompt 含 action few-shot。"""
+    system_text = build_system_prompt()["content"][0]["text"]
+    assert "action" in system_text
+    assert "动作库" in system_text
+    assert "优先看语音线索、面部表情、肢体语言" in system_text
+    assert "不要把 neutral.think.* 当默认动作" in system_text
     single = build_single_person_prompt()
-    multi = build_multi_person_prompt(person_count=3)
-    assert '"detected_emotion"' in single
-    assert '"individual_emotions"' in multi
+    assert '"action"' in single
+    assert '"reason"' in single
+    assert "参考示例" in single
+    assert "环境信息仅作弱参考" in single
+    assert "证据不足或冲突时，输出 idle" in single
 
 
 def test_build_conversation_with_audio() -> None:

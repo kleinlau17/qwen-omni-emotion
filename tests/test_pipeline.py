@@ -102,21 +102,42 @@ class _FakeModel:
         torch_dtype: str,
         attn_implementation: str,
         max_new_tokens: int,
+        do_sample: bool,
+        temperature: float,
+        top_p: float,
+        repetition_penalty: float,
+        min_pixels: int,
+        max_pixels: int,
+        torch_compile: bool,
     ) -> None:
         self.model_path = model_path
         self.torch_dtype = torch_dtype
         self.attn_implementation = attn_implementation
         self.max_new_tokens = max_new_tokens
+        self.do_sample = do_sample
+        self.temperature = temperature
+        self.top_p = top_p
+        self.repetition_penalty = repetition_penalty
+        self.min_pixels = min_pixels
+        self.max_pixels = max_pixels
+        self.torch_compile = torch_compile
         self.load_called = False
-        self.infer_called = 0
+        self.batch_infer_called = 0
 
     def load(self) -> None:
         self.load_called = True
 
-    def infer(self, conversation: list[dict[str, Any]], use_audio_in_video: bool = True) -> str:
-        del conversation, use_audio_in_video
-        self.infer_called += 1
-        return '{"detected_emotion":"happy","self_emotion":"neutral","action":"scan_01"}'
+    def batch_infer(
+        self,
+        conversations: list[list[dict[str, Any]]],
+        use_audio_in_video: bool = True,
+    ) -> list[str]:
+        del use_audio_in_video
+        self.batch_infer_called += 1
+        return [
+            '{"action":"neutral.surprise.quick.low","reason":"检测到突发刺激信号，先给出轻微惊讶回应。"}'
+            for _ in conversations
+        ]
 
 
 class _FakeTracker:
@@ -140,6 +161,10 @@ def _build_test_config() -> dict[str, Any]:
             "torch_dtype": "bfloat16",
             "attn_implementation": "sdpa",
             "max_new_tokens": 128,
+            "do_sample": True,
+            "temperature": 0.35,
+            "top_p": 0.9,
+            "repetition_penalty": 1.05,
             "use_audio_in_video": True,
         },
         "capture": {
@@ -188,11 +213,15 @@ def test_pipeline_orchestration_updates_state(monkeypatch: Any) -> None:
     time.sleep(0.05)
     pipeline.stop()
 
-    assert pipeline.model.infer_called >= 1
+    assert pipeline.model.batch_infer_called >= 1
     assert len(pipeline.tracker.updated) >= 1
+    latest_result, _ = pipeline.tracker.updated[-1]
+    assert latest_result.action_confidence == 0.5
+    assert latest_result.hold_seconds == 1.0
     current_state = pipeline.get_current_state()
     assert "person_0" in current_state
-    assert current_state["person_0"]["detected_emotion"] == "happy"
+    assert current_state["person_0"]["detected_emotion"] == "neutral"
+    assert current_state["person_0"]["description"] == "检测到突发刺激信号，先给出轻微惊讶回应。"
 
 
 def test_load_merged_config(tmp_path: Any) -> None:

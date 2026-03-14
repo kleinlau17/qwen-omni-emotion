@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Qwen-Omni 情绪理解仪表盘</title>
-  <link rel="stylesheet" href="/static/style.css?v=3">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <title>Qwen-Omni 动作理解仪表盘</title>
+  <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body>
   <!-- 顶部状态栏 -->
@@ -50,7 +49,7 @@
       </div>
     </section>
 
-    <!-- 右侧：情绪卡片（按推理轮次） -->
+    <!-- 右侧：动作卡片（按推理轮次） -->
     <section id="emotion-panel">
       <h2>推理历史</h2>
       <div id="emotion-cards">
@@ -59,14 +58,6 @@
     </section>
   </main>
 
-  <!-- 底部：趋势图 -->
-  <section id="trend-panel">
-    <h2>情绪趋势</h2>
-    <div id="chart-container">
-      <canvas id="trend-chart"></canvas>
-    </div>
-  </section>
-
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=5"></script>
 </body>
 </html>

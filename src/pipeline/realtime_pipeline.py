@@ -2,13 +2,13 @@
 
 架构::
 
-    StreamBuffer → [PrepThread] → PrepQueue(FIFO) → [InferThread] → Dashboard
+    StreamBuffer → [PrepThread] → PrepQueue(最新优先) → [InferThread] → Dashboard
                      ~0.5s/窗口                        ~4.5s/推理     即时更新
 
 - PrepThread 持续从 StreamBuffer 拉取窗口并预处理（帧采样/ROI/resize/构建 conversation），
-  结果推入线程安全的 FIFO 队列。
+  结果推入线程安全队列；当积压出现时主动丢弃旧项，仅保留更“新”的待推理数据。
 - InferThread 从队列取出 1~batch_size 个 prepared item 执行推理，每完成一批立即更新状态。
-- FIFO 保证时间轴顺序；预处理与推理并行消除了预处理等待。
+- 最新优先策略可避免推理结果随时间持续“越跑越旧”；预处理与推理并行消除了预处理等待。
 """
 from __future__ import annotations
 
@@ -148,8 +148,13 @@ class RealtimePipeline:
             torch_dtype=str(infer_cfg.get("torch_dtype", "bfloat16")),
             attn_implementation=str(infer_cfg.get("attn_implementation", "sdpa")),
             max_new_tokens=int(infer_cfg.get("max_new_tokens", 128)),
+            do_sample=bool(infer_cfg.get("do_sample", True)),
+            temperature=float(infer_cfg.get("temperature", 0.35)),
+            top_p=float(infer_cfg.get("top_p", 0.9)),
+            repetition_penalty=float(infer_cfg.get("repetition_penalty", 1.05)),
             min_pixels=int(infer_cfg.get("min_pixels", 128 * 28 * 28)),
             max_pixels=int(infer_cfg.get("max_pixels", 256 * 28 * 28)),
+            torch_compile=bool(infer_cfg.get("torch_compile", False)),
         )
         LOGGER.info("  [6/6] 初始化状态追踪器与动作调度 ...")
         self.tracker = EmotionStateTracker(
@@ -375,6 +380,16 @@ class RealtimePipeline:
             if window is None:
                 time.sleep(self._inference_interval)
                 continue
+            # 最新优先：若缓冲区中仍有积压窗口，持续拉取直到最后一个，仅处理最新窗口。
+            skipped_windows = 0
+            while True:
+                newer_window = self.stream_buffer.get_window()
+                if newer_window is None:
+                    break
+                window = newer_window
+                skipped_windows += 1
+            if skipped_windows > 0:
+                LOGGER.info("预处理阶段跳过 %d 个旧窗口，改为处理最新窗口", skipped_windows)
 
             try:
                 sampled_frames = self.frame_sampler.sample(window.frames)
@@ -400,17 +415,7 @@ class RealtimePipeline:
                 person_frames = self._prepare_person_inputs(sampled_frames)
 
                 for person_idx, frames in enumerate(person_frames):
-                    last_action = None
-                    try:
-                        last_state = self.tracker.get_current_state(
-                            f"person_{person_idx}"
-                        )
-                        if last_state is not None:
-                            last_action = last_state.action
-                    except Exception:
-                        last_action = None
-
-                    task_prompt = build_single_person_prompt(last_action=last_action)
+                    task_prompt = build_single_person_prompt()
                     resized = [
                         Image.fromarray(f).resize(
                             (target_w, target_h), Image.LANCZOS,
@@ -434,9 +439,21 @@ class RealtimePipeline:
                     }
                     while self._is_running():
                         try:
-                            self._prep_queue.put(item, timeout=1.0)
+                            self._prep_queue.put_nowait(item)
                             break
                         except queue.Full:
+                            # 最新优先：队列满时先丢弃一个最旧项，再写入当前新项。
+                            try:
+                                dropped = self._prep_queue.get_nowait()
+                                LOGGER.info(
+                                    "预处理队列满，已丢弃旧项 (window=#%d person=%d)",
+                                    int(dropped.get("window_serial", -1)),
+                                    int(dropped.get("person_idx", -1)),
+                                )
+                            except queue.Empty:
+                                # 并发竞争下队列可能瞬间被消费，下一轮直接重试。
+                                continue
+                        except Exception:
                             continue
 
                 window_serial += 1
@@ -448,27 +465,35 @@ class RealtimePipeline:
     def _infer_loop(self) -> None:
         """从 _prep_queue 取出 prepared item 执行推理，完成即更新状态。
 
-        每轮从队列中取 1~batch_size 个 item，调用 batch_infer，
-        结果逐条更新 tracker 和仪表盘状态。FIFO 取出保证时间轴顺序。
+        每轮优先消费队列中最新的 1~batch_size 个 item，调用 batch_infer，
+        结果逐条更新 tracker 和仪表盘状态。
         """
         while self._is_running():
             batch_items: list[dict[str, Any]] = []
 
             try:
                 first = self._prep_queue.get(timeout=1.0)
-                batch_items.append(first)
+                pending_items: list[dict[str, Any]] = [first]
             except queue.Empty:
                 continue
 
-            for _ in range(self._batch_size - 1):
+            # 将当前可用积压全部取出，再仅保留最新 batch_size 条，避免延迟持续累积。
+            while True:
                 try:
-                    batch_items.append(self._prep_queue.get_nowait())
+                    pending_items.append(self._prep_queue.get_nowait())
                 except queue.Empty:
                     break
+            if len(pending_items) > self._batch_size:
+                dropped_count = len(pending_items) - self._batch_size
+                batch_items = pending_items[-self._batch_size:]
+                LOGGER.info("推理阶段跳过 %d 个旧项，优先处理最新批次", dropped_count)
+            else:
+                batch_items = pending_items
 
             infer_start = perf_counter()
             try:
-                has_audio = any(item["audio"] is not None for item in batch_items)
+                # batch 内需全员有音频才启用音频，避免 processor 出现占位符数量不一致。
+                has_audio = all(item["audio"] is not None for item in batch_items)
                 conversations = [item["conversation"] for item in batch_items]
 
                 responses = self.model.batch_infer(
@@ -489,16 +514,18 @@ class RealtimePipeline:
                         )
                         continue
                     LOGGER.info(
-                        "解析结果: detected_emotion=%s self_emotion=%s action=%s",
+                        "解析结果: detected_emotion=%s action=%s reason=%s",
                         result.detected_emotion,
-                        result.self_emotion,
                         result.action,
+                        result.reason,
                     )
                     normalized = EmotionResult(
                         person_id=f"person_{item['person_idx']}",
                         detected_emotion=result.detected_emotion,
-                        self_emotion=result.self_emotion,
                         action=result.action,
+                        reason=result.reason,
+                        action_confidence=result.action_confidence,
+                        hold_seconds=result.hold_seconds,
                     )
                     self.tracker.update(normalized, timestamp=item["end_ts"])
                     with self._state_lock:
@@ -577,11 +604,10 @@ class RealtimePipeline:
                     "id": item_id,
                     "person_id": result.person_id,
                     "detected_emotion": result.detected_emotion,
-                    "self_emotion": result.self_emotion,
                     "action": result.action,
                     "emotion_intensity": None,
                     "confidence": None,
-                    "description": None,
+                    "description": result.reason,
                     "timestamp": end_ts,
                     "frames": frame_list,
                     "audio": audio_copy,
@@ -599,11 +625,10 @@ class RealtimePipeline:
                 person_id: {
                     "person_id": item.person_id,
                     "detected_emotion": item.detected_emotion,
-                    "self_emotion": item.self_emotion,
                     "action": item.action,
                     "emotion_intensity": None,
                     "confidence": None,
-                    "description": None,
+                    "description": item.reason,
                 }
                 for person_id, item in self._latest_states.items()
             }
@@ -668,7 +693,6 @@ class RealtimePipeline:
                 "id": item["id"],
                 "person_id": item["person_id"],
                 "detected_emotion": item["detected_emotion"],
-                "self_emotion": item["self_emotion"],
                 "action": item["action"],
                 "emotion_intensity": item["emotion_intensity"],
                 "confidence": item["confidence"],

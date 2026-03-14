@@ -120,13 +120,18 @@ close_sender()
 
 ### 动作调度层 (ActionScheduler)
 
-`action_scheduler.py` 在模型输出与机器人发送之间提供可扩展的调度逻辑。当前为透传实现，可后续扩展节流、去重、优先级等策略。
+`action_scheduler.py` 在模型输出与机器人发送之间提供可扩展的调度逻辑。当前为透传实现，可后续扩展节流、去重、优先级等策略。调度层会将模型侧的新动作名映射回机器人旧动作名后再发送。
 
 ```python
 from src.robot.action_scheduler import ActionScheduler
 from src.prompts.output_schema import EmotionResult
 
 scheduler = ActionScheduler(config={})
-result = EmotionResult(person_id="person_0", detected_emotion="happy", self_emotion="neutral", action="standard_yes")
+result = EmotionResult(
+    person_id="person_0",
+    detected_emotion="happy",
+    self_emotion="neutral",
+    action="neutral.affirm.default.mid",
+)
 actions = scheduler.submit(result, timestamp=0.0)  # -> ["standard_yes"]
 ```

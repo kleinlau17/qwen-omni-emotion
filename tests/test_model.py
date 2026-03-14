@@ -12,7 +12,7 @@ def test_qwen_omni_model_init_does_not_load() -> None:
     """初始化时不应加载模型和 processor。"""
     model = QwenOmniModel(model_path="Qwen/Qwen2.5-Omni-3B")
     assert model.model_path == "Qwen/Qwen2.5-Omni-3B"
-    assert model.max_new_tokens == 512
+    assert model.max_new_tokens == 128
     assert model.is_loaded() is False
 
 
@@ -60,10 +60,47 @@ def test_infer_with_mocked_model_and_processor() -> None:
     generate_kwargs = mock_model.generate.call_args.kwargs
     assert torch.equal(generate_kwargs["input_ids"], torch.tensor([[1, 2, 3]]))
     assert generate_kwargs["use_audio_in_video"] is True
-    assert generate_kwargs["max_new_tokens"] == 512
+    assert generate_kwargs["max_new_tokens"] == 128
     batch_decode_args = mock_processor.batch_decode.call_args.args
     batch_decode_kwargs = mock_processor.batch_decode.call_args.kwargs
     assert len(batch_decode_args) == 1
-    assert torch.equal(batch_decode_args[0], torch.tensor([[101, 102, 103]]))
+    assert batch_decode_args[0].shape[0] == 1
     assert batch_decode_kwargs["skip_special_tokens"] is True
     assert batch_decode_kwargs["clean_up_tokenization_spaces"] is False
+
+
+def test_batch_infer_audio_stop_iteration_fallback_to_no_audio() -> None:
+    """音频模板构建失败时应自动降级为无音频推理。"""
+    qwen_model = QwenOmniModel(model_path="dummy/path")
+
+    mock_inputs = MagicMock()
+    mock_inputs.to.return_value = {"input_ids": torch.tensor([[1, 2, 3]])}
+
+    mock_processor = MagicMock()
+    mock_processor.apply_chat_template.side_effect = [StopIteration(), mock_inputs]
+    mock_processor.batch_decode.return_value = ['{"emotion":"neutral"}']
+
+    mock_model = MagicMock()
+    mock_model.device = torch.device("cpu")
+    mock_model.generate.return_value = torch.tensor([[101, 102, 103]])
+
+    qwen_model._processor = mock_processor
+    qwen_model._model = mock_model
+
+    conversation = [
+        {"role": "system", "content": [{"type": "text", "text": "sys"}]},
+        {
+            "role": "user",
+            "content": [
+                {"type": "video", "video": []},
+                {"type": "audio", "audio": [0.0]},
+                {"type": "text", "text": "task"},
+            ],
+        },
+    ]
+    output = qwen_model.batch_infer(conversations=[conversation], use_audio_in_video=True)
+    assert output == ['{"emotion":"neutral"}']
+
+    calls = mock_processor.apply_chat_template.call_args_list
+    assert calls[0].kwargs["use_audio_in_video"] is True
+    assert calls[1].kwargs["use_audio_in_video"] is False

@@ -53,7 +53,6 @@ class MockPipeline:
                 result = EmotionResult(
                     person_id=pid,
                     detected_emotion=emotion,
-                    self_emotion=random.choice(VALID_EMOTIONS),
                     action=random.choice(VALID_ACTIONS),
                 )
                 self._emotions[pid] = result
@@ -69,7 +68,6 @@ class MockPipeline:
             pid: {
                 "person_id": r.person_id,
                 "detected_emotion": r.detected_emotion,
-                "self_emotion": r.self_emotion,
                 "action": r.action,
                 "emotion_intensity": None,
                 "confidence": None,

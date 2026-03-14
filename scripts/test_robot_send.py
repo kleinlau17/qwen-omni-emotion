@@ -28,7 +28,7 @@ from src.robot.animation_action import (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="模拟模型输出并转发给机器人，测试 sad_yes 等动作是否执行"
+        description="模拟模型输出并转发给机器人，测试 sad.affirm.default.low 等动作是否执行"
     )
     parser.add_argument(
         "--host",
@@ -50,8 +50,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--action",
         type=str,
-        default="sad_yes",
-        help="模拟的 action，默认 sad_yes",
+        default="sad.affirm.default.low",
+        help="模拟的 action，默认 sad.affirm.default.low",
     )
     return parser.parse_args()
 
@@ -68,16 +68,13 @@ def main() -> None:
     # 模拟模型输出
     model_output = {
         "detected_emotion": "neutral",
-        "self_emotion": "neutral",
         "action": args.action,
     }
     print(f"模拟模型输出: {model_output}")
 
-    # 构建 EmotionResult
     result = EmotionResult(
         person_id="person_0",
         detected_emotion=model_output["detected_emotion"],
-        self_emotion=model_output["self_emotion"],
         action=model_output["action"],
     )
 

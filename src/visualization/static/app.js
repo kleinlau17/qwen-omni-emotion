@@ -1,16 +1,6 @@
 /**
- * Qwen-Omni 情绪理解仪表盘 — WebSocket 客户端 + Chart.js 趋势图
+ * Qwen-Omni 仪表盘 — WebSocket 客户端
  */
-
-const EMOTION_LABELS = {
-  happy: "开心", sad: "悲伤", angry: "愤怒", fearful: "恐惧",
-  surprised: "惊讶", disgusted: "厌恶", neutral: "平静", contemptuous: "轻蔑"
-};
-
-const EMOTION_COLORS = {
-  happy: "#fbbf24", sad: "#4a9eff", angry: "#f87171", fearful: "#a78bfa",
-  surprised: "#f472b6", disgusted: "#a3e635", neutral: "#8b8fa3", contemptuous: "#fb923c"
-};
 
 // ── WebSocket 连接 ─────────────────────────────────────────
 
@@ -18,6 +8,35 @@ let ws = null;
 let reconnectTimer = null;
 const WS_URL = `ws://${location.host}/ws`;
 let historyFrozen = false;
+const ACTION_LABELS = {
+  idle: "保持不动",
+  "neutral.affirm.playful.low": "俏皮点头",
+  "neutral.affirm.default.mid": "正常点头",
+  "neutral.affirm.default.high": "用力点头",
+  "neutral.affirm.expressive.high": "激动认同",
+  "shy.affirm.inquiring.mid": "害羞点头",
+  "angry.affirm.default.high": "怒气认同",
+  "sad.affirm.default.low": "低落认同",
+  "neutral.deny.quick.low": "快速摇头",
+  "neutral.deny.default.mid": "正常摇头",
+  "shy.deny.inquiring.mid": "害羞摇头",
+  "angry.deny.default.high": "怒气摇头",
+  "sad.deny.default.low": "伤心摇头",
+  "neutral.attention.default.mid": "认真注视",
+  "neutral.recover.default.mid": "鼓励",
+  "neutral.dialogue.default.mid": "对话回应",
+  "angry.greet.default.mid": "不耐烦",
+  "neutral.think.murmur.low": "小声嘀咕",
+  "neutral.think.muted.low": "安静沉思",
+  "neutral.think.animated.mid": "活跃地思索",
+  "neutral.question.default.low": "轻声提问",
+  "neutral.question.default.mid": "正常提问",
+  "neutral.question.default.high": "大声提问",
+  "neutral.surprise.quick.low": "轻微惊讶",
+  "neutral.alarm.expressive.high": "惊吓尖叫",
+  "neutral.apology.default.low": "抱歉",
+  "sad.sigh.default.low": "叹气",
+};
 
 function connectWebSocket() {
   if (ws && ws.readyState <= WebSocket.OPEN) return;
@@ -37,7 +56,6 @@ function connectWebSocket() {
       if (!historyFrozen) {
         updateEmotionCards(data.history);
       }
-      updateTrendChart(data.trends);
     } catch (e) {
       console.error("WebSocket 消息解析失败:", e);
     }
@@ -101,30 +119,11 @@ function updateEmotionCards(history) {
 
   for (const item of sortedHistory.reverse()) {
     const e = item;
+    const actionText = ACTION_LABELS[e.action] || "未定义动作";
     const card = document.createElement("div");
     card.className = "emotion-card";
-    const hasIntensity = typeof e.emotion_intensity === "number";
-    const hasConfidence = typeof e.confidence === "number";
-    const intensityPct = hasIntensity ? Math.round(e.emotion_intensity * 100) : null;
-    const confidencePct = hasConfidence ? Math.round(e.confidence * 100) : null;
-    const detectedLabel = EMOTION_LABELS[e.detected_emotion] || e.detected_emotion;
-    const selfLabel = EMOTION_LABELS[e.self_emotion] || e.self_emotion;
-
-    const confidenceHtml = confidencePct != null
-      ? `<span class="confidence-badge">置信度 ${confidencePct}%</span>`
-      : "";
-    const intensityHtml = intensityPct != null
-      ? `<div class="intensity-bar-container">
-          <span class="intensity-label">${intensityPct}%</span>
-          <div class="intensity-bar-bg">
-            <div class="intensity-bar-fill bar-${e.detected_emotion}"
-                 style="width: ${intensityPct}%"></div>
-          </div>
-        </div>`
-      : "";
-    const descriptionHtml = e.description != null && e.description !== ""
-      ? `<div class="description">${escapeHtml(e.description)}</div>`
-      : "";
+    const reasonTextRaw = e.reason ?? e.description ?? "";
+    const reasonText = String(reasonTextRaw).trim();
     const ts =
       typeof e.timestamp === "number"
         ? new Date(e.timestamp * 1000).toLocaleTimeString("zh-CN", {
@@ -152,17 +151,13 @@ function updateEmotionCards(history) {
           e.person_id != null ? e.person_id : ""
         )}</span>
         <span class="timestamp">${escapeHtml(ts)}</span>
-        ${confidenceHtml}
       </div>
       <div class="media-row">
         ${framesHtml}
         <audio class="history-audio" controls src="${audioUrl}"></audio>
       </div>
-      <div class="primary-emotion emotion-${e.detected_emotion}">识别情绪: ${detectedLabel}</div>
-      <div class="secondary-emotion">自身情绪: ${selfLabel}</div>
-      <div class="secondary-emotion">交互动作: ${escapeHtml(e.action || "")}</div>
-      ${intensityHtml}
-      ${descriptionHtml}
+      <div class="action-text">交互动作: ${escapeHtml(actionText)}</div>
+      <div class="reason-text">动作原因: ${escapeHtml(reasonText || "-")}</div>
     `;
     fragment.appendChild(card);
   }
@@ -175,97 +170,6 @@ function escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
-}
-
-// ── Chart.js 趋势图 ───────────────────────────────────────
-
-let trendChart = null;
-const MAX_TREND_POINTS = 20;
-const trendHistory = {};
-
-function initChart() {
-  const ctx = document.getElementById("trend-chart").getContext("2d");
-  trendChart = new Chart(ctx, {
-    type: "line",
-    data: { labels: [], datasets: [] },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 300 },
-      scales: {
-        x: {
-          display: true,
-          grid: { color: "rgba(255,255,255,0.05)" },
-          ticks: { color: "#8b8fa3", maxTicksLimit: 10 }
-        },
-        y: {
-          min: 0, max: 1,
-          grid: { color: "rgba(255,255,255,0.05)" },
-          ticks: { color: "#8b8fa3", stepSize: 0.2 },
-          title: { display: true, text: "情绪强度", color: "#8b8fa3" }
-        }
-      },
-      plugins: {
-        legend: {
-          labels: { color: "#e4e6f0", boxWidth: 12, padding: 16 }
-        }
-      },
-      interaction: { mode: "index", intersect: false },
-      elements: {
-        point: { radius: 2, hoverRadius: 4 },
-        line: { tension: 0.3 }
-      }
-    }
-  });
-}
-
-function updateTrendChart(trends) {
-  if (!trendChart || !trends) return;
-
-  const now = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-
-  for (const [personId, dataPoints] of Object.entries(trends)) {
-    if (!trendHistory[personId]) {
-      trendHistory[personId] = [];
-    }
-    if (dataPoints.length > 0) {
-      const latest = dataPoints[dataPoints.length - 1];
-      if (typeof latest.emotion_intensity === "number") {
-        trendHistory[personId].push({
-          time: now,
-          intensity: latest.emotion_intensity,
-          emotion: latest.detected_emotion
-        });
-        if (trendHistory[personId].length > MAX_TREND_POINTS) {
-          trendHistory[personId].shift();
-        }
-      }
-    }
-  }
-
-  const allPersonIds = Object.keys(trendHistory).sort();
-  if (allPersonIds.length === 0) return;
-
-  const referenceId = allPersonIds[0];
-  const labels = trendHistory[referenceId].map(p => p.time);
-
-  const datasets = allPersonIds.map((pid, idx) => {
-    const history = trendHistory[pid];
-    const latestEmotion = history.length > 0 ? history[history.length - 1].emotion : "neutral";
-    const color = EMOTION_COLORS[latestEmotion] || "#8b8fa3";
-    return {
-      label: pid,
-      data: history.map(p => p.intensity),
-      borderColor: color,
-      backgroundColor: color + "33",
-      fill: false,
-      borderWidth: 2
-    };
-  });
-
-  trendChart.data.labels = labels;
-  trendChart.data.datasets = datasets;
-  trendChart.update("none");
 }
 
 // ── 初始化 ─────────────────────────────────────────────────
@@ -300,7 +204,6 @@ function bindControls() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  initChart();
   connectWebSocket();
   bindControls();
 });

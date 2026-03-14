@@ -56,7 +56,7 @@ def build_conversation(frames: list[Image.Image]) -> list[dict[str, Any]]:
                 {"type": "video", "video": frames},
                 {"type": "text", "text": (
                     "请对当前单人场景进行情绪识别与互动决策，并返回严格 JSON。"
-                    '{"detected_emotion":"happy","self_emotion":"neutral","action":"scan_01"}'
+                    '{"detected_emotion":"happy","action":"neutral.surprise.quick.low"}'
                 )},
             ],
         },

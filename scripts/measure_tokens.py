@@ -13,26 +13,22 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 samples = {
     "最短输出": json.dumps({
         "detected_emotion": "neutral",
-        "self_emotion": "neutral",
-        "action": "scan_01",
+        "action": "idle",
     }, ensure_ascii=False),
 
     "典型输出": json.dumps({
         "detected_emotion": "happy",
-        "self_emotion": "surprised",
-        "action": "curious",
+        "action": "neutral.affirm.playful.low",
     }, ensure_ascii=False),
 
     "模型可能带前缀的情况": '```json\n' + json.dumps({
         "detected_emotion": "happy",
-        "self_emotion": "neutral",
-        "action": "scan_01",
+        "action": "neutral.surprise.quick.low",
     }, ensure_ascii=False) + '\n```',
 
     "带缩进的 JSON (模型有时会格式化)": json.dumps({
         "detected_emotion": "surprised",
-        "self_emotion": "happy",
-        "action": "laugh_big",
+        "action": "neutral.alarm.expressive.high",
     }, indent=2, ensure_ascii=False),
 }
 
