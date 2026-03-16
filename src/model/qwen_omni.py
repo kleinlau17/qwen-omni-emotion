@@ -213,12 +213,16 @@ class QwenOmniModel:
         t_preprocess: float = perf_counter()
 
         with torch.inference_mode():
+            stop_token_ids: list[int] = [92]
+            if self._processor.tokenizer.eos_token_id is not None:
+                stop_token_ids.append(self._processor.tokenizer.eos_token_id)
             generate_kwargs: dict[str, Any] = {
                 "use_audio_in_video": effective_use_audio,
                 "max_new_tokens": self.max_new_tokens,
                 "do_sample": self.do_sample,
                 "use_cache": True,
                 "repetition_penalty": self.repetition_penalty,
+                "eos_token_id": stop_token_ids,
             }
             if self.do_sample:
                 generate_kwargs["temperature"] = self.temperature

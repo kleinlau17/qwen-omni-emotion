@@ -81,6 +81,17 @@ class ActionScheduler:
         timestamp: float,
     ) -> list[str]:
         """调度策略：按人物状态机节流，优先处理动作切换。"""
+        if result.action == "idle":
+            LOGGER.debug(
+                "idle 动作跳过发送: person=%s", result.person_id,
+            )
+            with self._lock:
+                self._last_by_person.setdefault(result.person_id, {
+                    "last_action": "idle",
+                    "last_send_ts": timestamp,
+                }).update({"last_action": "idle", "last_send_ts": timestamp})
+            return []
+
         if self._pass_through:
             return [result.action]
 
