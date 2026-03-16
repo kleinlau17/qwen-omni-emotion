@@ -10,15 +10,13 @@ from PIL import Image
 def build_single_person_prompt() -> str:
     """构建单人情绪分析任务指令（精简版，减少 token 数）。"""
     return (
-        "如果画面中有人，请仔细观察人物的面部表情、肢体动作，以及语音内容/语气来判断是否需要机器人执行回应动作。\n"
+        "如果画面中有人，请仔细观察人物的情绪、肢体动作，以及语音内容/语气来判断是否需要机器人执行回应动作。\n"
         "规则：\n"
-        "- 只从动作库选择 action。\n"
-        "- 只要有可解释互动信号，优先选择非 idle 动作。\n"
-        "- 动作不明显时不要认为用户在思考。\n"
-        "- 要注意结合动作库中的动作含义，选择最合适的动作。\n"
+        "- 必须从动作库选择 action。\n"
+        "- 若人物信息不足，优先输出 idle 动作。\n"
         '- 输出必须包含两个字段：action 和 reason（<=10字）。\n'
         "参考示例：\n"
-        '{"action":"idle","reason":"用户很平静。"}\n'
+        '{"action":"idle","reason":"用户在思考。"}\n'
         '{"action":"neutral.recover.default.mid","reason":"用户很沮丧。"}\n'
         '{"action":"neutral.affirm.playful.low","reason":"用户很开心，在打招呼。"}\n'
         "仅输出 JSON。"

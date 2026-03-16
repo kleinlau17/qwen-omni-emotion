@@ -19,4 +19,4 @@ inference:
   return_audio: false             # 不需要模型生成语音（仅文本输出）
   min_pixels: 100352              # 128 * 28 * 28 — 保证最低视觉清晰度
   max_pixels: 200704              # 256 * 28 * 28 — 匹配 480x270 分辨率，确保表情可辨
-  torch_compile: true             # 启用 torch.compile() 加速推理
+  torch_compile: true            # 关闭，减少编译期峰值内存

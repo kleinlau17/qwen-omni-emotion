@@ -54,63 +54,24 @@ VALID_ACTIONS: list[str] = [
     "sad.affirm.default.low",
 ]
 
-ACTION_GROUPS: dict[str, list[tuple[str, str]]] = {
-    "静止 — 无需回应或等待时": [
-        ("idle", "保持不动"),
-    ],
-    "认同/点头 — 用户说了什么，BDX 表示赞同或回应": [
-        ("neutral.affirm.playful.low", "俏皮点头"),
-        ("neutral.affirm.default.mid", "正常点头"),
-        ("neutral.affirm.default.high", "用力点头"),
-        ("neutral.affirm.expressive.high", "激动认同"),
-        ("shy.affirm.inquiring.mid", "害羞点头"),
-        ("angry.affirm.default.high", "怒气认同"),
-        ("sad.affirm.default.low", "低落认同"),
-    ],
-    "否定/摇头 — 不同意或拒绝": [
-        ("neutral.deny.quick.low", "快速摇头"),
-        ("neutral.deny.default.mid", "正常摇头"),
-        ("shy.deny.inquiring.mid", "害羞摇头"),
-        ("angry.deny.default.high", "怒气摇头"),
-        ("sad.deny.default.low", "伤心摇头"),
-    ],
-    "关注 — 注视用户或给予鼓励": [
-        ("neutral.attention.default.mid", "认真注视"),
-        ("neutral.recover.default.mid", "鼓励"),
-    ],
-    "对话/交流 — 用户正在说话，BDX 参与互动": [
-        ("neutral.dialogue.default.mid", "对话回应"),
-        ("angry.greet.default.mid", "不耐烦"),
-    ],
-    "倾听 — BDX 在倾听用户说的话": [
-        ("neutral.think.murmur.low", "小声嘀咕"),
-        ("neutral.think.animated.mid", "活跃地思索"),
-    ],
-    "提问/好奇 — 对用户的状态或言语感到好奇": [
-        ("neutral.question.default.low", "轻声提问"),
-        ("neutral.question.default.mid", "正常提问"),
-        ("neutral.question.default.high", "大声提问"),
-    ],
-    "惊讶/惊吓 — 遇到意外情况": [
-        ("neutral.surprise.quick.low", "轻微惊讶"),
-        ("neutral.alarm.expressive.high", "惊吓尖叫"),
-    ],
-    "道歉/尴尬 — 感到抱歉或不好意思": [
-        ("neutral.apology.default.low", "抱歉"),
-    ],
-    "叹气 — 表达同情或无奈": [
-        ("sad.sigh.default.low", "叹气"),
-    ],
-}
+ACTION_LIBRARY: list[tuple[str, str]] = [
+    ("idle", "保持不动"),
+    ("neutral.affirm.playful.low", "俏皮点头"),
+    ("neutral.affirm.default.high", "用力点头"),
+    ("neutral.deny.quick.low", "快速摇头"),
+    ("neutral.deny.default.mid", "正常摇头"),
+    ("neutral.attention.default.mid", "认真注视"),
+    ("neutral.recover.default.mid", "鼓励"),
+    ("neutral.dialogue.default.mid", "对话回应"),
+    ("neutral.think.animated.mid", "活跃地思索"),
+    ("neutral.question.default.mid", "正常提问"),
+    ("neutral.surprise.quick.low", "轻微惊讶"),
+]
 
 
 def format_action_library() -> str:
-    """将动作分组格式化为 prompt 可嵌入的紧凑文本。"""
-    lines: list[str] = []
-    for group_name, actions in ACTION_GROUPS.items():
-        action_strs = " / ".join(f"{name}({desc})" for name, desc in actions)
-        lines.append(f"■ {group_name}：{action_strs}")
-    return "\n".join(lines)
+    """将动作列表格式化为 prompt 可嵌入的紧凑文本。"""
+    return " / ".join(f"{name}({desc})" for name, desc in ACTION_LIBRARY)
 
 
 
@@ -176,7 +137,7 @@ SINGLE_PERSON_SCHEMA: str = json.dumps(
 )
 
 __all__ = [
-    "ACTION_GROUPS",
+    "ACTION_LIBRARY",
     "EmotionResult",
     "SINGLE_PERSON_SCHEMA",
     "VALID_ACTIONS",
